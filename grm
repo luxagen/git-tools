@@ -9,7 +9,7 @@ my $config = {
 my $args = $#ARGV +1;
 die "Please supply the base URL\n" unless $args > 0;
 die "Fewer arguments!\n" unless $args <= 2;
-open (my $fh, '<', ".remotes") or die;
+open (my $fh, '<', ".remotes") or exit 0;
 while (<$fh>){
     chomp;
 
