@@ -30,10 +30,12 @@ while (<$fh>){
 
     $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
 
-    system qq!git clone "$ARGV[0]/$config->{REMOTE_SUFFIX}/$REMOTE_REL" "./$LOCAL_REL"!;
+    system qq!git clone --no-checkout "$ARGV[0]/$config->{REMOTE_SUFFIX}/$REMOTE_REL" "./$LOCAL_REL"!;
     system qq!(cd "./$LOCAL_REL" && gmc "$ARGV[0]" "$ARGV[1]")!;
 
 	my $mediaPath = join('/', grep {$_} $config->{GM_SUFFIX}, $GM_REL);
 	my $configCmd = $ARGV[1];
-	system qq!(cd "./$LOCAL_REL" && $configCmd $mediaPath && (git media sync; git media clear))! if $configCmd;
+	system qq!(cd "./$LOCAL_REL" && $configCmd $mediaPath)! if $configCmd;
+
+	system qq!(cd "./$LOCAL_REL" && git reset --hard)!;
 }
