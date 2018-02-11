@@ -6,9 +6,13 @@ my $config = {
 	GM_SUFFIX => undef,
 };
 
-my $args = $#ARGV +1;
+my $args = $#ARGV + 1;
+
 die "Please supply the base URL\n" unless $args > 0;
 die "Fewer arguments!\n" unless $args <= 2;
+
+$ARGV[1] = '' unless defined $ARGV[1];
+
 open (my $fh, '<', ".remotes") or exit 0;
 while (<$fh>){
     chomp;
