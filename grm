@@ -40,8 +40,8 @@ while (<$fh>){
 	my $mediaPath = join('/', grep {$_} $config->{GM_SUFFIX}, $GM_REL);
 	my $configCmd = $ARGV[1];
 
-	system qq!git clone --no-checkout "$ARGV[0]/$remotePath" "$localPath"!;
+	my $cloneResult = system qq!git clone --no-checkout "$ARGV[0]/$remotePath" "$localPath"!;
 	system qq!(cd "$localPath" && gmc "$ARGV[0]" "$ARGV[1]")!;
 	system qq!(cd "$localPath" && $configCmd "$mediaPath")! if $configCmd;
-	system qq!(cd "$localPath" && git reset --hard)!;
+	system qq!(cd "$localPath" && git reset --hard)! unless $cloneResult;
 }
