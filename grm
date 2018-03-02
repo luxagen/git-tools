@@ -2,9 +2,9 @@
 use strict;
 use warnings;
 my $config = {
-	REMOTE_SUFFIX => '',
-	LOCAL_SUFFIX => '.',
-	GM_SUFFIX => undef,
+	REMOTE_DIR => '',
+	LOCAL_DIR => '.',
+	GM_DIR => undef,
 };
 
 my $args = $#ARGV + 1;
@@ -35,9 +35,9 @@ while (<$fh>){
 
     $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
 
-	my $remotePath = "$config->{REMOTE_SUFFIX}/$REMOTE_REL";
-	my $localPath = "$config->{LOCAL_SUFFIX}/$LOCAL_REL";
-	my $mediaPath = join('/', grep {$_} $config->{GM_SUFFIX}, $GM_REL);
+	my $remotePath = "$config->{REMOTE_DIR}/$REMOTE_REL";
+	my $localPath = "$config->{LOCAL_DIR}/$LOCAL_REL";
+	my $mediaPath = join('/', grep {$_} $config->{GM_DIR}, $GM_REL);
 	my $configCmd = $ARGV[1];
 
 	my $cloneResult = system qq!git clone --no-checkout "$ARGV[0]/$remotePath" "$localPath"!;
