@@ -42,6 +42,15 @@ while (<$fh>){
 	my $configCmd = $ARGV[1];
 
     my $cloneFailed = system qq!git clone --no-checkout "$ARGV[0]/$remotePath" "$localPath"!;
+
+    my $repoRoot = `cd "$localPath" && git rev-parse --show-prefix`;
+    chomp $repoRoot;
+
+    if ($repoRoot ne '') {
+		print STDERR "ERROR: '$localPath' exists but is not a git repository!\n";
+		next;
+    }
+
 	system qq!(cd "$localPath" && gmc "$ARGV[0]" "$ARGV[1]")!;
 	system qq!(cd "$localPath" && $configCmd "$mediaPath")! if $configCmd;
 
