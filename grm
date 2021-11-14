@@ -1,6 +1,8 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use Cwd qw(cwd getcwd);
+use File::Spec::Functions qw(catfile);
 
 my $args = $#ARGV + 1;
 
@@ -14,6 +16,9 @@ my $config = {
 	LOCAL_DIR => '.',
 	GM_DIR => undef,
 };
+
+our $treeFilter = cwd; # Save current directory so we can use it later
+&chdir_remotes;        # Change to the nearest ancestor dir containing a listfile
 
 open (my $fh, '<', ".remotes") or exit 0;
 while (<$fh>){
@@ -36,28 +41,82 @@ while (<$fh>){
     $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
 	$GM_REL = $REMOTE_REL unless ($GM_REL ne '');
 
-	my $remotePath = "$config->{REMOTE_DIR}/$REMOTE_REL";
-	my $localPath = "$config->{LOCAL_DIR}/$LOCAL_REL";
+	my $remotePath = catfile($config->{REMOTE_DIR}, $REMOTE_REL);
+	my $localPath = catfile($config->{LOCAL_DIR}, $LOCAL_REL);
 	my $mediaPath = join('/', grep {$_} $config->{GM_DIR}, $GM_REL);
 	my $configCmd = $ARGV[1];
 
-    my $cloneFailed = system qq!git clone --no-checkout "$ARGV[0]/$remotePath" "$localPath"!;
+	next if catfile(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
 
-    my $repoRoot = `cd "$localPath" && git rev-parse --show-prefix`;
-    chomp $repoRoot;
+	if (-e $localPath) {
+		unless (-d $localPath) {
+			# Flag non-dirs that block repos
+			print STDERR "ERROR: '$localPath' is not a directory\n";
+			next;
+		}
 
-    if ($repoRoot ne '') {
-		print STDERR "ERROR: '$localPath' exists but is not a git repository!\n";
-		next;
-    }
+		# Don't touch non-repo dirs with a bargepole
+		unless (&is_dir_repo_root($localPath)) {
+			print STDERR "ERROR: '$localPath' exists but is not a repository\n";
+			next;
+		}
 
-	system qq!(cd "$localPath" && gmc "$ARGV[0]" "$ARGV[1]")!;
-	system qq!(cd "$localPath" && $configCmd "$mediaPath")! if $configCmd;
-
-    if ($cloneFailed) {
-		system qq!(cd "$localPath" && git remote set-url origin "$ARGV[0]/$remotePath")!;
+		# Don't clone but do update remote & GM config
+		print STDERR "'$localPath': repository already exists\n";
+		unless (
+			&repo_set_remote($localPath, "$ARGV[0]/$remotePath")
+		and	&repo_config($localPath, $mediaPath, $configCmd)) {
+			die "ERROR: configuration failed\n";
+		}
 	}
 	else {
-        system qq!(cd "$localPath" && git reset --hard)! unless $cloneFailed;
+		# We need to configure GM after clone but before checkout, thus the three steps
+		unless (
+			&repo_clone_nocheckout($localPath, "$ARGV[0]/$remotePath")
+		and	&repo_config($localPath, $mediaPath, $configCmd)
+		and	&repo_check_out($localPath)) {
+			die "ERROR: cloning, configuration, or checkout failed\n";
+		}
 	}
+
+    system qq!cd "$localPath" && gc-luxagen && if [ -e .remotes ]; then gmc "$ARGV[0]" "$ARGV[1]"; fi!; # Run child instance for subdirs with .remotes files
+}
+
+exit 0;
+
+########################################################################################################################
+
+sub chdir_remotes {
+	until (-e '.remotes') {
+		die 'No .remotes file found in current directory or any ancestor' unless chdir('..');
+	}
+}
+
+sub is_dir_repo_root {
+	my ($localPath) = @_;
+
+	my $prefix = `cd "$localPath" && git rev-parse --show-prefix`;
+	chomp $prefix;
+	return $prefix eq '';
+}
+
+sub repo_clone_nocheckout {
+	my ($localPath, $remotePath) = @_;
+	return not system qq!git clone --no-checkout "$remotePath" "$localPath" 1>&2!;
+}
+
+sub repo_config {
+    my ($repoPath, $mediaPath, $cmd) = @_;
+	$mediaPath = '' unless defined $mediaPath;
+	return not ($cmd and system qq!cd "$repoPath" && $cmd "$mediaPath" 1>&2!);
+}
+
+sub repo_check_out {
+	my ($localPath) = @_;
+	return not system qq!cd "$localPath" && git reset --hard 1>&2!;
+}
+
+sub repo_set_remote {
+	my ($localPath, $remotePath) = @_;
+	return not system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!;
 }
