@@ -1,15 +1,19 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
+use File::Basename qw(basename);
 use Cwd qw(cwd getcwd);
 use File::Spec::Functions qw(catfile);
+
+our $myPath = $0;
+our $myName = basename($myPath);
 
 our $fnList = '.remotes';
 
 my $args = $#ARGV + 1;
 
-die "Please supply the base URL\n" unless $args > 0;
-die "Fewer arguments!\n" unless $args <= 2;
+die "$myName: base URL missing\n" unless $args > 0;
+die "$myName: too many arguments\n" unless $args <= 2;
 
 $ARGV[1] = '' unless defined $ARGV[1];
 
@@ -59,16 +63,16 @@ while (<$fh>){
 
 		# Don't touch non-repo dirs with a bargepole
 		unless (&is_dir_repo_root($localPath)) {
-			print STDERR "ERROR: '$localPath' exists but is not a repository\n";
+			print STDERR "ERROR: '$localPath' is not a Git repository\n";
 			next;
 		}
 
 		# Don't clone but do update remote & GM config
-		print STDERR "'$localPath': repository already exists\n";
+		print STDERR "'$localPath' exists\n";
 		unless (
 			&repo_set_remote($localPath, "$ARGV[0]/$remotePath")
 		and	&repo_config($localPath, $mediaPath, $configCmd)) {
-			die "ERROR: configuration failed\n";
+			die "$myName: configuration failed for '$localPath'\n";
 		}
 	}
 	else {
@@ -77,11 +81,11 @@ while (<$fh>){
 			&repo_clone_nocheckout($localPath, "$ARGV[0]/$remotePath")
 		and	&repo_config($localPath, $mediaPath, $configCmd)
 		and	&repo_check_out($localPath)) {
-			die "ERROR: cloning, configuration, or checkout failed\n";
+			die "$myName: cloning, configuration, or checkout failed for '$localPath'\n";
 		}
 	}
 
-    system qq!cd "$localPath" && gc-luxagen && if [ -e "$fnList" ]; then gmc "$ARGV[0]" "$ARGV[1]"; fi!; # Run child instance for subdirs containing list files
+    system qq!cd "$localPath" && gc-luxagen && if [ -e "$fnList" ]; then "$myPath" "$ARGV[0]" "$ARGV[1]"; fi!; # Run child instance for subdirs containing list files
 }
 
 exit 0;
@@ -90,7 +94,7 @@ exit 0;
 
 sub chdir_find_listfile {
 	until (-e $fnList) {
-		die "No '$fnList' file found in current directory or any ancestor\n" unless chdir('..');
+		die "$myName: no '$fnList' file found in current directory or any ancestor\n" unless chdir('..');
 	}
 }
 
