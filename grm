@@ -4,6 +4,8 @@ use warnings;
 use Cwd qw(cwd getcwd);
 use File::Spec::Functions qw(catfile);
 
+our $fnList = '.remotes';
+
 my $args = $#ARGV + 1;
 
 die "Please supply the base URL\n" unless $args > 0;
@@ -18,9 +20,9 @@ my $config = {
 };
 
 our $treeFilter = cwd; # Save current directory so we can use it later
-&chdir_remotes;        # Change to the nearest ancestor dir containing a listfile
+&chdir_find_listfile;  # Change to the nearest ancestor dir containing a listfile
 
-open (my $fh, '<', ".remotes") or exit 0;
+open (my $fh, '<', $fnList) or exit 0;
 while (<$fh>){
     chomp;
 
@@ -79,16 +81,16 @@ while (<$fh>){
 		}
 	}
 
-    system qq!cd "$localPath" && gc-luxagen && if [ -e .remotes ]; then gmc "$ARGV[0]" "$ARGV[1]"; fi!; # Run child instance for subdirs with .remotes files
+    system qq!cd "$localPath" && gc-luxagen && if [ -e "$fnList" ]; then gmc "$ARGV[0]" "$ARGV[1]"; fi!; # Run child instance for subdirs containing list files
 }
 
 exit 0;
 
 ########################################################################################################################
 
-sub chdir_remotes {
-	until (-e '.remotes') {
-		die 'No .remotes file found in current directory or any ancestor' unless chdir('..');
+sub chdir_find_listfile {
+	until (-e $fnList) {
+		die "No '$fnList' file found in current directory or any ancestor\n" unless chdir('..');
 	}
 }
 
