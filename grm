@@ -10,12 +10,15 @@ our $myName = basename($myPath);
 
 our $fnList = '.remotes';
 
-my $args = $#ARGV + 1;
+my $args = scalar @ARGV;
 
 die "$myName: base URL missing\n" unless $args > 0;
 die "$myName: too many arguments\n" unless $args <= 2;
 
-$ARGV[1] = '' unless defined $ARGV[1];
+my $baseURL = $ARGV[0];
+my $configCmd = $ARGV[1];
+my $recurseCmd = qq! "$myPath" "$baseURL" !;
+$recurseCmd .= (defined $recurseCmd) ? " '$recurseCmd'" : '';
 
 my $config = {
 	REMOTE_DIR => '',
@@ -70,7 +73,7 @@ while (<$fh>){
 		# Don't clone but do update remote & GM config
 		print STDERR "'$localPath' exists\n";
 		unless (
-			&repo_set_remote($localPath, "$ARGV[0]/$remotePath")
+			&repo_set_remote($localPath, "$baseURL/$remotePath")
 		and	&repo_config($localPath, $mediaPath, $configCmd)) {
 			die "$myName: configuration failed for '$localPath'\n";
 		}
@@ -78,14 +81,14 @@ while (<$fh>){
 	else {
 		# We need to configure GM after clone but before checkout, thus the three steps
 		unless (
-			&repo_clone_nocheckout($localPath, "$ARGV[0]/$remotePath")
+			&repo_clone_nocheckout($localPath, "$baseURL/$remotePath")
 		and	&repo_config($localPath, $mediaPath, $configCmd)
 		and	&repo_check_out($localPath)) {
 			die "$myName: cloning, configuration, or checkout failed for '$localPath'\n";
 		}
 	}
 
-    system qq!cd "$localPath" && gc-luxagen && if [ -e "$fnList" ]; then "$myPath" "$ARGV[0]" "$ARGV[1]"; fi!; # Run child instance for subdirs containing list files
+    system qq!cd "$localPath" && gc-luxagen && if [ -e "$fnList" ]; then $recurseCmd; fi!; # Run child instance for subdirs containing list files
 }
 
 exit 0;
