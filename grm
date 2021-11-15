@@ -10,17 +10,13 @@ our $myName = basename($myPath);
 
 our $fnList = '.remotes';
 
-my $args = scalar @ARGV;
+our $childPrefix = $ENV{'GMC_RECURSE_PREFIX'} // '';
 
-die "$myName: base URL missing\n" unless $args > 0;
-die "$myName: too many arguments\n" unless $args <= 2;
+die "$myName: too many arguments\n" unless scalar @ARGV == 0;
 
-my $baseURL = $ARGV[0];
-my $configCmd = $ARGV[1];
-my $recurseCmd = qq! "$myPath" "$baseURL" !;
-$recurseCmd .= (defined $recurseCmd) ? " '$recurseCmd'" : '';
-
-my $config = {
+our $config = {
+	OPT_RECURSE => 1,
+	CONFIG_CMD => '',
 	REMOTE_DIR => '',
 	LOCAL_DIR => '.',
 	GM_DIR => undef,
@@ -53,43 +49,44 @@ while (<$fh>){
 	my $remotePath = catfile($config->{REMOTE_DIR}, $REMOTE_REL);
 	my $localPath = catfile($config->{LOCAL_DIR}, $LOCAL_REL);
 	my $mediaPath = join('/', grep {$_} $config->{GM_DIR}, $GM_REL);
-	my $configCmd = $ARGV[1];
+
+	die "$myName: '$childPrefix$fnList' does not define REMOTE_BASE_URL\n" if not defined $config->{REMOTE_BASE_URL};
 
 	next if catfile(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
 
 	if (-e $localPath) {
 		unless (-d $localPath) {
 			# Flag non-dirs that block repos
-			print STDERR "ERROR: '$localPath' is not a directory\n";
+			print STDERR "ERROR: '$childPrefix$localPath' is not a directory\n";
 			next;
 		}
 
 		# Don't touch non-repo dirs with a bargepole
 		unless (&is_dir_repo_root($localPath)) {
-			print STDERR "ERROR: '$localPath' is not a Git repository\n";
+			print STDERR "ERROR: '$childPrefix$localPath' is not a Git repository\n";
 			next;
 		}
 
 		# Don't clone but do update remote & GM config
-		print STDERR "'$localPath' exists\n";
+		print STDERR "'$childPrefix$localPath' exists\n";
 		unless (
-			&repo_set_remote($localPath, "$baseURL/$remotePath")
-		and	&repo_config($localPath, $mediaPath, $configCmd)) {
-			die "$myName: configuration failed for '$localPath'\n";
+			&repo_set_remote($localPath, "$config->{REMOTE_BASE_URL}/$remotePath")
+		and	&repo_config($localPath, $mediaPath)) {
+			die "$myName: configuration failed for '$childPrefix$localPath'\n";
 		}
 	}
 	else {
 		# We need to configure GM after clone but before checkout, thus the three steps
 		unless (
-			&repo_clone_nocheckout($localPath, "$baseURL/$remotePath")
-		and	&repo_config($localPath, $mediaPath, $configCmd)
+			&repo_clone_nocheckout($localPath, "$config->{REMOTE_BASE_URL}/$remotePath")
+		and	&repo_config($localPath, $mediaPath)
 		and	&repo_check_out($localPath)) {
-			die "$myName: cloning, configuration, or checkout failed for '$localPath'\n";
+			die "$myName: cloning, configuration, or checkout failed for '$childPrefix$localPath'\n";
 		}
 	}
-
-    system qq!cd "$localPath" && gc-luxagen && if [ -e "$fnList" ]; then $recurseCmd; fi!; # Run child instance for subdirs containing list files
 }
+
+&recurse($treeFilter) if $config->{OPT_RECURSE};
 
 exit 0;
 
@@ -97,7 +94,8 @@ exit 0;
 
 sub chdir_find_listfile {
 	until (-e $fnList) {
-		die "$myName: no '$fnList' file found in current directory or any ancestor\n" unless chdir('..');
+		my $prev = cwd;
+		die "$myName: no '$childPrefix$fnList' file found in current directory or any ancestor\n" unless chdir('..') and cwd ne $prev;
 	}
 }
 
@@ -115,9 +113,9 @@ sub repo_clone_nocheckout {
 }
 
 sub repo_config {
-    my ($repoPath, $mediaPath, $cmd) = @_;
+    my ($repoPath, $mediaPath) = @_;
 	$mediaPath = '' unless defined $mediaPath;
-	return not ($cmd and system qq!cd "$repoPath" && $cmd "$mediaPath" 1>&2!);
+	return not ($config->{CONFIG_CMD} and system qq!cd "$repoPath" && $config->{CONFIG_CMD} "$mediaPath" 1>&2!);
 }
 
 sub repo_check_out {
@@ -128,4 +126,32 @@ sub repo_check_out {
 sub repo_set_remote {
 	my ($localPath, $remotePath) = @_;
 	return not system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!;
+}
+
+sub recurse {
+    my ($dir) = @_;
+	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
+
+	die "$myName: cannot open directory '$dir'\n"
+		unless opendir(my $handle, $dir);
+
+	my @kids = readdir($handle);
+
+	foreach my $kid (@kids) {
+		my $kidPath = "$dir/$kid";
+		next if (not -d $kidPath);
+
+		next if $kid eq "." or $kid eq ".." or $kid =~ /.git$/;
+
+		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
+			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
+
+			system qq!cd "$kidPath" && GMC_RECURSE_PREFIX="$kidPathRel/" "$myPath"!;
+			next; # Recursion will have found any deeper listfiles, so bail on this dir
+		}
+
+		&recurse($kidPath);
+	}
+
+	closedir($handle);
 }
