@@ -1,11 +1,6 @@
 #!/usr/bin/perl
 use strict;
 use warnings;
-my $config = {
-	REMOTE_DIR => '',
-	LOCAL_DIR => '.',
-	GM_DIR => undef,
-};
 
 my $args = $#ARGV + 1;
 
@@ -13,6 +8,12 @@ die "Please supply the base URL\n" unless $args > 0;
 die "Fewer arguments!\n" unless $args <= 2;
 
 $ARGV[1] = '' unless defined $ARGV[1];
+
+my $config = {
+	REMOTE_DIR => '',
+	LOCAL_DIR => '.',
+	GM_DIR => undef,
+};
 
 open (my $fh, '<', ".remotes") or exit 0;
 while (<$fh>){
