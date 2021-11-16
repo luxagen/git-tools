@@ -18,12 +18,11 @@ open (my $fh, '<', ".remotes") or exit 0;
 while (<$fh>){
     chomp;
 
-    s/#.*$//;              # Remove comments (can be suffix)
-    next if /^\s*$/;       # Skip lines of pure whitespace
-    next if /.*:.*:.*:.*/; # Skip 4-column lines (reserved)
-    s/\s+$//;              # Remove trailing whitespace (can happen after stripping inline comments)
+    s/#.*$//;        # Remove comments (can be suffix)
+    next if /^\s*$/; # Skip lines of pure whitespace
+    s/\s+$//;        # Remove trailing whitespace (can happen after stripping inline comments)
 
-    my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = split /:/;
+    my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = split /:/, $_, 3;
     $REMOTE_REL = '' unless defined ($REMOTE_REL);
     $LOCAL_REL = '' unless defined ($LOCAL_REL);
     $GM_REL = '' unless defined ($GM_REL);
