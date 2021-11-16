@@ -15,6 +15,7 @@ die "$myName: too many arguments\n" unless scalar @ARGV == 0;
 
 our $config = {
 	OPT_RECURSE => 1,
+	OPT_DEBUG_PRIMITIVES => 0,
 	CONFIG_CMD => '',
 	REMOTE_DIR => '',
 	LOCAL_DIR => '.',
@@ -23,6 +24,9 @@ our $config = {
 
 our $treeFilter = cwd; # Save current directory so we can use it later
 &chdir_find_listfile;  # Change to the nearest ancestor dir containing a listfile
+
+print STDERR "  Using list file '$childPrefix$fnList'\n"
+	if $config->{OPT_DEBUG_PRIMITIVES};
 
 open (my $fh, '<', $fnList) or exit 0;
 while (<$fh>){
@@ -82,6 +86,9 @@ sub cat_path {
 }
 
 sub chdir_find_listfile {
+	printf STDERR "  chdir_find_listfile: starting at '%s'\n", cwd
+		if $config->{OPT_DEBUG_PRIMITIVES};
+
 	until (-e $fnList) {
 		my $prev = cwd;
 
@@ -104,6 +111,9 @@ sub is_dir_repo_root {
 
 sub repo_process {
 	my ($localPath, $remotePath, $mediaPath) = @_;
+
+	print STDERR "  repo_process: '$childPrefix$localPath'\n"
+		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	if (-e $localPath) {
 		unless (-d $localPath) {
@@ -134,7 +144,10 @@ sub repo_process {
 sub repo_clone_nocheckout {
 	my ($localPath, $remotePath) = @_;
 
-	die "$myName: cloning failed for '$childPrefix$localPath'\n"
+	print STDERR "  repo_clone_nocheckout: '$childPrefix$localPath'\n"
+		if $config->{OPT_DEBUG_PRIMITIVES};
+
+	die "$myName: repo_clone_nocheckout failed\n"
 		if system qq!git clone --no-checkout "$remotePath" "$localPath" 1>&2!;
 }
 
@@ -143,29 +156,40 @@ sub repo_config {
 
 	$mediaPath = '' unless defined $mediaPath;
 
-	die "$myName: configuration failed for '$childPrefix$localPath'\n"
-		if $config->{CONFIG_CMD} and system qq!cd "$localPath" && $config->{CONFIG_CMD} "$mediaPath" 1>&2!;
+	return unless $config->{CONFIG_CMD};
+
+	print STDERR "  repo_config: '$childPrefix$localPath' with '$mediaPath'\n"
+		if $config->{OPT_DEBUG_PRIMITIVES};
+
+	die "$myName: repo_config failed\n"
+		if system qq!cd "$localPath" && $config->{CONFIG_CMD} "$mediaPath" 1>&2!;
 }
 
 sub repo_check_out {
 	my ($localPath) = @_;
 
-	die "$myName: checkout failed for '$childPrefix$localPath'\n"
+	print STDERR "  repo_check_out: '$childPrefix$localPath'\n"
+		if $config->{OPT_DEBUG_PRIMITIVES};
+
+	die "$myName: repo_check_out failed\n"
 		if system qq!cd "$localPath" && git reset --hard 1>&2!;
 }
 
 sub repo_set_remote {
 	my ($localPath, $remotePath) = @_;
 
-	system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!
-		and die "$myName: configuration failed for '$childPrefix$localPath'\n";
+	print STDERR "  repo_set_remote: '$childPrefix$localPath'\n"
+		if $config->{OPT_DEBUG_PRIMITIVES};
+
+	die "$myName: repo_set_remote failed\n"
+		if system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!;
 }
 
 sub recurse {
     my ($dir) = @_;
 	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
 
-	die "$myName: cannot open directory '$dir'\n"
+	die "$myName: recursion to '${\cat_path($childPrefix, $dir)}' failed\n"
 		unless opendir(my $handle, $dir);
 
 	my @kids = readdir($handle);
