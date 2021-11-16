@@ -11,7 +11,14 @@ our $fnList = '.remotes';
 
 our $childPrefix = $ENV{'GMC_RECURSE_PREFIX'} // '';
 
-die "$myName: too many arguments\n" unless scalar @ARGV == 0;
+use constant MODE_LIST => qw(
+	clone
+	set-remote
+	configure
+	run
+);
+
+use constant MODE_LIST_LS => join("\n", MODE_LIST);
 
 our $config = {
 	OPT_RECURSE => 1,
@@ -21,6 +28,10 @@ our $config = {
 	LOCAL_DIR => '.',
 	GM_DIR => undef,
 };
+
+# Process the one and only possible command-line arg
+die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
+&mode_set(shift @ARGV);
 
 our $treeFilter = cwd; # Save current directory so we can use it later
 &chdir_find_listfile;  # Change to the nearest ancestor dir containing a listfile
@@ -109,39 +120,62 @@ sub is_dir_repo_root {
 	return $prefix eq '';
 }
 
+sub mode_set {
+	my ($mode) = @_;
+
+	die "$myName: missing mode\n" if not defined($mode) or $mode eq '';
+	die "$myName: no such mode '$mode'; must be one of:\n${\MODE_LIST_LS}\n" unless grep(/^$mode$/, MODE_LIST);
+
+	$config->{MODE} = $mode;
+
+	if ($mode eq 'run') {
+		$config->{MODE_CLONE}      = 1;
+		$config->{MODE_SET_REMOTE} = 1;
+	}
+	else {
+		$config->{MODE_CLONE}      = $mode eq      'clone';
+		$config->{MODE_SET_REMOTE} = $mode eq 'set-remote';
+		$config->{MODE_CONFIGURE}  = $mode eq  'configure';
+	}
+
+	$config->{MODE_CONFIGURE} ||= $config->{MODE_CLONE}; # Cloning requires configuration as phase 2/3, before checkout
+}
+
 sub repo_process {
 	my ($localPath, $remotePath, $mediaPath) = @_;
 
 	print STDERR "  repo_process: '$childPrefix$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	if (-e $localPath) {
-		unless (-d $localPath) {
-			# Flag non-dirs that block repos
-			print STDERR "ERROR: '$childPrefix$localPath' is not a directory\n";
-			next;
-		}
-
-		# Don't touch non-repo dirs with a bargepole
-		unless (&is_dir_repo_root($localPath)) {
-			print STDERR "ERROR: '$childPrefix$localPath' is not a Git repository\n";
-			return;
-		}
-
-		# Don't clone but update remote & configure
-		print STDERR "'$childPrefix$localPath' exists\n";
-		&repo_set_remote($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
-		&repo_config($localPath, $mediaPath);
-	}
-	else {
+	unless (-e $localPath) {
 		# We need to configure after clone but before checkout, thus the three steps
 		&repo_clone_nocheckout($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
 		&repo_config($localPath, $mediaPath);
 		&repo_check_out($localPath);
+		return;
 	}
+
+	unless (-d $localPath) {
+		# Flag non-dirs that block repos
+		print STDERR "ERROR: '$childPrefix$localPath' is not a directory\n";
+		return;
+	}
+
+	# Don't touch non-repo dirs with a bargepole
+	unless (&is_dir_repo_root($localPath)) {
+		print STDERR "ERROR: '$childPrefix$localPath' is not a Git repository\n";
+		return;
+	}
+
+	# For existing repos, don't clone but do update remote & configure
+	print STDERR "'$childPrefix$localPath' exists\n";
+	&repo_set_remote($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
+	&repo_config($localPath, $mediaPath);
 }
 
 sub repo_clone_nocheckout {
+	return unless $config->{MODE_CLONE};
+
 	my ($localPath, $remotePath) = @_;
 
 	print STDERR "  repo_clone_nocheckout: '$childPrefix$localPath'\n"
@@ -152,11 +186,11 @@ sub repo_clone_nocheckout {
 }
 
 sub repo_config {
+	return unless $config->{MODE_CONFIGURE} and $config->{CONFIG_CMD};
+
     my ($localPath, $mediaPath) = @_;
 
 	$mediaPath = '' unless defined $mediaPath;
-
-	return unless $config->{CONFIG_CMD};
 
 	print STDERR "  repo_config: '$childPrefix$localPath' with '$mediaPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
@@ -166,6 +200,8 @@ sub repo_config {
 }
 
 sub repo_check_out {
+	return unless $config->{MODE_CLONE}; # Checkout is the last phase of cloning
+
 	my ($localPath) = @_;
 
 	print STDERR "  repo_check_out: '$childPrefix$localPath'\n"
@@ -176,6 +212,8 @@ sub repo_check_out {
 }
 
 sub repo_set_remote {
+	return unless $config->{MODE_SET_REMOTE};
+
 	my ($localPath, $remotePath) = @_;
 
 	print STDERR "  repo_set_remote: '$childPrefix$localPath'\n"
@@ -186,6 +224,8 @@ sub repo_set_remote {
 }
 
 sub recurse {
+	return unless $config->{OPT_RECURSE};
+
     my ($dir) = @_;
 	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
 
@@ -203,7 +243,7 @@ sub recurse {
 		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
 			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
 
-			system qq!cd "$kidPath" && GMC_RECURSE_PREFIX="$kidPathRel/" "$myPath"!;
+			system qq!cd "$kidPath" && GMC_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!;
 			next; # Recursion will have found any deeper listfiles, so bail on this dir
 		}
 
