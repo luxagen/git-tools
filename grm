@@ -1,0 +1,39 @@
+#!/usr/bin/perl
+use strict;
+use warnings;
+my $config = {
+	REMOTE_SUFFIX => '',
+	GM_SUFFIX => undef,
+};
+
+my $args = $#ARGV +1;
+die "Please supply the base URL\n" unless $args > 0;
+die "Fewer arguments!\n" unless $args <= 2;
+open (my $fh, '<', ".remotes") or die;
+while (<$fh>){
+    chomp;
+
+    s/#.*$//;              # Remove comments (can be suffix)
+    next if /^\s*$/;       # Skip lines of pure whitespace
+    next if /.*:.*:.*:.*/; # Skip 4-column lines (reserved)
+    s/\s+$//;              # Remove trailing whitespace (can happen after stripping inline comments)
+
+    my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = split /:/;
+    $REMOTE_REL = '' unless defined ($REMOTE_REL);
+    $LOCAL_REL = '' unless defined ($LOCAL_REL);
+    $GM_REL = '' unless defined ($GM_REL);
+
+	if ($REMOTE_REL eq '') {
+		$config->{$LOCAL_REL} = $GM_REL;
+		next;
+	}
+
+    $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
+
+    system qq!git clone "$ARGV[0]/$config->{REMOTE_SUFFIX}/$REMOTE_REL" "./$LOCAL_REL"!;
+    system qq!(cd "./$LOCAL_REL" && gmc "$ARGV[0]" "$ARGV[1]")!;
+
+	my $mediaPath = join('/', grep {$_} $config->{GM_SUFFIX}, $GM_REL);
+	my $configCmd = $ARGV[1];
+	system qq!(cd "./$LOCAL_REL" && $configCmd $mediaPath && (git media sync; git media clear))! if $configCmd;
+}
