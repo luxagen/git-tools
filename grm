@@ -15,6 +15,9 @@ use constant MODE_LIST => qw(
 	clone
 	set-remote
 	configure
+	list-rrel
+	list-rurl
+	list-lrel
 	run
 );
 
@@ -129,13 +132,16 @@ sub mode_set {
 	$config->{MODE} = $mode;
 
 	if ($mode eq 'run') {
-		$config->{MODE_CLONE}      = 1;
+		$config->{MODE_CLONE     } = 1;
 		$config->{MODE_SET_REMOTE} = 1;
 	}
 	else {
-		$config->{MODE_CLONE}      = $mode eq      'clone';
-		$config->{MODE_SET_REMOTE} = $mode eq 'set-remote';
-		$config->{MODE_CONFIGURE}  = $mode eq  'configure';
+		$config->{MODE_CLONE     } = $mode eq       'clone';
+		$config->{MODE_SET_REMOTE} = $mode eq  'set-remote';
+		$config->{MODE_CONFIGURE } = $mode eq   'configure';
+		$config->{MODE_LIST_RREL } = $mode eq   'list-rrel';
+		$config->{MODE_LIST_RURL } = $mode eq   'list-rurl';
+		$config->{MODE_LIST_LREL } = $mode eq   'list-lrel';
 	}
 
 	$config->{MODE_CONFIGURE} ||= $config->{MODE_CLONE}; # Cloning requires configuration as phase 2/3, before checkout
@@ -144,12 +150,19 @@ sub mode_set {
 sub repo_process {
 	my ($localPath, $remotePath, $mediaPath) = @_;
 
+	my $remoteURL = "$config->{REMOTE_BASE_URL}/$remotePath";
+
+	# These return in order to maximise speed
+	return print "$remotePath\n"            if $config->{MODE_LIST_RREL};
+	return print "$remoteURL\n"             if $config->{MODE_LIST_RURL};
+	return print "$childPrefix$localPath\n" if $config->{MODE_LIST_LREL};
+
 	print STDERR "  repo_process: '$childPrefix$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	unless (-e $localPath) {
 		# We need to configure after clone but before checkout, thus the three steps
-		&repo_clone_nocheckout($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
+		&repo_clone_nocheckout($localPath, $remoteURL);
 		&repo_config($localPath, $mediaPath);
 		&repo_check_out($localPath);
 		return;
@@ -169,7 +182,7 @@ sub repo_process {
 
 	# For existing repos, don't clone but do update remote & configure
 	print STDERR "'$childPrefix$localPath' exists\n";
-	&repo_set_remote($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
+	&repo_set_remote($localPath, $remoteURL);
 	&repo_config($localPath, $mediaPath);
 }
 
