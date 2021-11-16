@@ -33,6 +33,7 @@ while (<$fh>){
 	}
 
     $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
+	$GM_REL = $REMOTE_REL unless ($GM_REL ne '');
 
 	my $remotePath = "$config->{REMOTE_DIR}/$REMOTE_REL";
 	my $localPath = "$config->{LOCAL_DIR}/$LOCAL_REL";
