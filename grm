@@ -49,7 +49,8 @@ while (<$fh>){
 	my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
 	my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
 
-	die "$myName: '$childPrefix$fnList' does not define REMOTE_BASE_URL\n" if not defined $config->{REMOTE_BASE_URL};
+	die "$myName: '$childPrefix$fnList' does not define REMOTE_BASE_URL\n"
+		unless defined $config->{REMOTE_BASE_URL};
 
 	&repo_process($localPath, $remotePath, $mediaPath)
 		if catfile(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
@@ -83,7 +84,9 @@ sub cat_path {
 sub chdir_find_listfile {
 	until (-e $fnList) {
 		my $prev = cwd;
-		die "$myName: no '$childPrefix$fnList' file found in current directory or any ancestor\n" unless chdir('..') and cwd ne $prev;
+
+		die "$myName: no '$childPrefix$fnList' file found in current directory or any ancestor\n"
+			unless chdir('..') and cwd ne $prev;
 	}
 }
 
@@ -91,6 +94,10 @@ sub is_dir_repo_root {
 	my ($localPath) = @_;
 
 	my $prefix = `cd "$localPath" && git rev-parse --show-prefix`;
+
+	die "$myName: is_dir_repo_root failed\n"
+		if $?;
+
 	chomp $prefix;
 	return $prefix eq '';
 }
@@ -113,42 +120,45 @@ sub repo_process {
 
 		# Don't clone but update remote & configure
 		print STDERR "'$childPrefix$localPath' exists\n";
-		unless (
-			&repo_set_remote($localPath, "$config->{REMOTE_BASE_URL}/$remotePath")
-		and	&repo_config($localPath, $mediaPath)) {
-			die "$myName: configuration failed for '$childPrefix$localPath'\n";
-		}
+		&repo_set_remote($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
+		&repo_config($localPath, $mediaPath);
 	}
 	else {
 		# We need to configure after clone but before checkout, thus the three steps
-		unless (
-			&repo_clone_nocheckout($localPath, "$config->{REMOTE_BASE_URL}/$remotePath")
-		and	&repo_config($localPath, $mediaPath)
-		and	&repo_check_out($localPath)) {
-			die "$myName: cloning, configuration, or checkout failed for '$childPrefix$localPath'\n";
-		}
+		&repo_clone_nocheckout($localPath, "$config->{REMOTE_BASE_URL}/$remotePath");
+		&repo_config($localPath, $mediaPath);
+		&repo_check_out($localPath);
 	}
 }
 
 sub repo_clone_nocheckout {
 	my ($localPath, $remotePath) = @_;
-	return not system qq!git clone --no-checkout "$remotePath" "$localPath" 1>&2!;
+
+	die "$myName: cloning failed for '$childPrefix$localPath'\n"
+		if system qq!git clone --no-checkout "$remotePath" "$localPath" 1>&2!;
 }
 
 sub repo_config {
-    my ($repoPath, $mediaPath) = @_;
+    my ($localPath, $mediaPath) = @_;
+
 	$mediaPath = '' unless defined $mediaPath;
-	return not ($config->{CONFIG_CMD} and system qq!cd "$repoPath" && $config->{CONFIG_CMD} "$mediaPath" 1>&2!);
+
+	die "$myName: configuration failed for '$childPrefix$localPath'\n"
+		if $config->{CONFIG_CMD} and system qq!cd "$localPath" && $config->{CONFIG_CMD} "$mediaPath" 1>&2!;
 }
 
 sub repo_check_out {
 	my ($localPath) = @_;
-	return not system qq!cd "$localPath" && git reset --hard 1>&2!;
+
+	die "$myName: checkout failed for '$childPrefix$localPath'\n"
+		if system qq!cd "$localPath" && git reset --hard 1>&2!;
 }
 
 sub repo_set_remote {
 	my ($localPath, $remotePath) = @_;
-	return not system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!;
+
+	system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!
+		and die "$myName: configuration failed for '$childPrefix$localPath'\n";
 }
 
 sub recurse {
