@@ -3,7 +3,6 @@ use strict;
 use warnings;
 use File::Basename qw(basename);
 use Cwd qw(cwd getcwd);
-use File::Spec::Functions qw(catfile);
 
 our $myPath = $0;
 our $myName = basename($myPath);
@@ -46,9 +45,9 @@ while (<$fh>){
     $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
 	$GM_REL = $REMOTE_REL unless ($GM_REL ne '');
 
-	my $remotePath = catfile($config->{REMOTE_DIR}, $REMOTE_REL);
-	my $localPath = catfile($config->{LOCAL_DIR}, $LOCAL_REL);
-	my $mediaPath = join('/', grep {$_} $config->{GM_DIR}, $GM_REL);
+	my $remotePath = &cat_path($config->{REMOTE_DIR}, $REMOTE_REL);
+	my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
+	my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
 
 	die "$myName: '$childPrefix$fnList' does not define REMOTE_BASE_URL\n" if not defined $config->{REMOTE_BASE_URL};
 
@@ -61,6 +60,25 @@ while (<$fh>){
 exit 0;
 
 ########################################################################################################################
+
+sub cat_path {
+	my @pieces = grep {defined $_ and $_ ne ''} @_;
+
+	my $result = undef;
+	for my $piece (reverse @pieces) {
+		$piece =~ s/^\.\///;
+		if (not defined $result) {
+			$result=$piece;
+		}
+		else {
+			$result = "$piece/$result";
+		}
+
+		return $result if $piece =~ /^\//;
+	}
+
+	return $result;	
+}
 
 sub chdir_find_listfile {
 	until (-e $fnList) {
@@ -143,7 +161,7 @@ sub recurse {
 	my @kids = readdir($handle);
 
 	foreach my $kid (@kids) {
-		my $kidPath = "$dir/$kid";
+		my $kidPath = cat_path($dir, $kid);
 		next if (not -d $kidPath);
 
 		next if $kid =~ /^\./;
