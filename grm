@@ -39,38 +39,48 @@ die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 our $treeFilter = cwd; # Save current directory so we can use it later
 &chdir_find_listfile;  # Change to the nearest ancestor dir containing a listfile
 
-print STDERR "  Using list file '$childPrefix$fnList'\n"
-	if $config->{OPT_DEBUG_PRIMITIVES};
-
-open (my $fh, '<', $fnList) or exit 0;
-while (<$fh>){
-	next unless defined (my $result = parse_line($_));
-    my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = @{$result};
-
-	unless ($REMOTE_REL) {
-		$config->{$LOCAL_REL} = $GM_REL;
-		next;
-	}
-
-    $LOCAL_REL = $REMOTE_REL unless $LOCAL_REL;
-	$GM_REL = $REMOTE_REL unless $GM_REL;
-
-	my $remotePath = &cat_path($config->{REMOTE_DIR}, $REMOTE_REL);
-	my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
-	my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
-
-	die "$myName: '$childPrefix$fnList' does not define REMOTE_BASE_URL\n"
-		unless defined $config->{REMOTE_BASE_URL};
-
-	&repo_process($localPath, $remotePath, $mediaPath)
-		if catfile(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
-}
+die "$myName: cannot open listfile '$childPrefix$fnList'\n"
+	unless open(my $handle, '<', $fnList);
+&listfile_process($handle, $fnList);
+close($handle);
 
 &recurse($treeFilter) if $config->{OPT_RECURSE};
 
 exit 0;
 
 ########################################################################################################################
+
+sub listfile_process {
+	my ($handle, $listFile) = @_;
+
+	my $quotedPath  =  $listFile ? "'$childPrefix$listFile'" : '<HANDLE>';
+
+	print STDERR "$myName: processing listfile $quotedPath\n" if
+		$config->{OPT_DEBUG_PRIMITIVES};
+
+	while (<$handle>){
+		next unless defined (my $result = parse_line($_));
+		my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = @{$result};
+
+		unless ($REMOTE_REL) {
+			$config->{$LOCAL_REL} = $GM_REL;
+			next;
+		}
+
+		$LOCAL_REL = $REMOTE_REL unless $LOCAL_REL;
+		$GM_REL = $REMOTE_REL unless $GM_REL;
+
+		my $remotePath = &cat_path($config->{REMOTE_DIR}, $REMOTE_REL);
+		my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
+		my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
+
+		die "$myName: $quotedPath does not define REMOTE_BASE_URL\n"
+			unless defined $config->{REMOTE_BASE_URL};
+
+		&repo_process($localPath, $remotePath, $mediaPath)
+			if cat_path(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
+	}
+}
 
 sub cat_path {
 	my @pieces = grep {defined $_ and $_ ne ''} @_;
