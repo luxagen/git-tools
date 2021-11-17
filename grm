@@ -44,24 +44,16 @@ print STDERR "  Using list file '$childPrefix$fnList'\n"
 
 open (my $fh, '<', $fnList) or exit 0;
 while (<$fh>){
-    chomp;
+	next unless defined (my $result = parse_line($_));
+    my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = @{$result};
 
-    s/#.*$//;        # Remove comments (can be suffix)
-    next if /^\s*$/; # Skip lines of pure whitespace
-    s/\s+$//;        # Remove trailing whitespace (can happen after stripping inline comments)
-
-    my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = split /:/, $_, 3;
-    $REMOTE_REL = '' unless defined ($REMOTE_REL);
-    $LOCAL_REL = '' unless defined ($LOCAL_REL);
-    $GM_REL = '' unless defined ($GM_REL);
-
-	if ($REMOTE_REL eq '') {
+	unless ($REMOTE_REL) {
 		$config->{$LOCAL_REL} = $GM_REL;
 		next;
 	}
 
-    $LOCAL_REL = $REMOTE_REL unless ($LOCAL_REL ne '');
-	$GM_REL = $REMOTE_REL unless ($GM_REL ne '');
+    $LOCAL_REL = $REMOTE_REL unless $LOCAL_REL;
+	$GM_REL = $REMOTE_REL unless $GM_REL;
 
 	my $remotePath = &cat_path($config->{REMOTE_DIR}, $REMOTE_REL);
 	my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
@@ -97,6 +89,19 @@ sub cat_path {
 	}
 
 	return $result;	
+}
+
+sub parse_line {
+	my ($line) = @_;
+
+	chomp $line;
+
+	$line =~ s/#.*$//;        # Remove comments (can be suffix)
+	return undef if $line =~ /^\s*$/; # Skip lines of pure whitespace
+
+	my @cols = split(':', $line, 3); # Split into (max) 3 cols
+	$#cols = 2; # Pad to 3 cols with undefs
+	return [map { ($_ // '') =~ s/^\s+|\s+$//gr } @cols]; # Each field: replace undef with empty then whitespace-trim
 }
 
 sub chdir_find_listfile {
