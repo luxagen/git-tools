@@ -3,14 +3,13 @@ use strict;
 use warnings;
 use File::Basename qw(basename);
 use Cwd qw(cwd getcwd);
+use IPC::Open3 qw(open3);
 
 our $myPath = $0;
 our $myName = basename($myPath);
 
 our $fnConf = '.grm.conf';
 our $fnList = '.grm.repos';
-
-our $childPrefix = $ENV{'GRM_RECURSE_PREFIX'} // '';
 
 use constant MODE_LIST => qw(
 	clone
@@ -25,9 +24,24 @@ use constant MODE_LIST => qw(
 use constant MODE_LIST_LS => join("\n", MODE_LIST);
 
 our $config = {
-	OPT_RECURSE => 1,
 	OPT_DEBUG_PRIMITIVES => 0,
 };
+
+if (-t STDIN) { # STDIN is a TTY, so get configuration from the 'nearest' conffile
+	$config->{OPT_RECURSE   } =  1;
+	$config->{RECURSE_PREFIX} = '';
+
+	# Special case: antirecurse to find the conffile and process it
+	my $pathConf = &find_conffile();
+	open(my $handle, '<', $pathConf) or die "$myName: cannot open '$pathConf'\n";
+	&listfile_process($handle, $pathConf);
+	close($handle);
+}
+else { # STDIN is likely a pipe; configure from STDIN instead of a conffile
+	&listfile_process(*STDIN, undef);
+}
+
+&config_clean($config); # Protect ourselves from conffile overreach
 
 # Process the one and only possible command-line arg
 die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
@@ -35,21 +49,13 @@ die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 
 our $treeFilter = cwd; # Save current directory so we can use it later
 
-my $pathConf = &find_conffile(); # Find the nearest conffile
-die "$myName: cannot open conffile '$pathConf'\n"
-	unless open(my $hConf, '<', $pathConf);
-&listfile_process($hConf, $pathConf);
-close($hConf);
-
-&config_clean($config); # Protect ourselves from conffile overreach
-
 &chdir_listfile; # Change to the nearest ancestor dir containing a listfile
-die "$myName: cannot open listfile '$childPrefix$fnList'\n"
-	unless open(my $hList, '<', $fnList);
-&listfile_process($hList, $fnList);
-close($hList);
+die "$myName: cannot open listfile '$config->{RECURSE_PREFIX}$fnList'\n"
+	unless open(my $handle, '<', $fnList);
+&listfile_process($handle, $fnList);
+close($handle);
 
-&recurse($treeFilter) if $config->{OPT_RECURSE};
+&recurse_listfiles($treeFilter) if $config->{OPT_RECURSE};
 
 exit 0;
 
@@ -58,7 +64,7 @@ exit 0;
 sub listfile_process {
 	my ($handle, $listFile) = @_;
 
-	my $quotedPath  =  $listFile ? "'$childPrefix$listFile'" : '<HANDLE>';
+	my $quotedPath  =  $listFile ? "'$config->{RECURSE_PREFIX}$listFile'" : '<HANDLE>';
 
 	print STDERR "$myName: processing $quotedPath\n" if
 		$config->{OPT_DEBUG_PRIMITIVES};
@@ -209,9 +215,9 @@ sub repo_process {
 	# These return in order to maximise speed
 	return print "$remotePath\n"            if $config->{MODE_LIST_RREL};
 	return print "$remoteURL\n"             if $config->{MODE_LIST_RURL};
-	return print "$childPrefix$localPath\n" if $config->{MODE_LIST_LREL};
+	return print "$config->{RECURSE_PREFIX}$localPath\n" if $config->{MODE_LIST_LREL};
 
-	print STDERR "  repo_process: '$childPrefix$localPath'\n"
+	print STDERR "  repo_process: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	unless (-e $localPath) {
@@ -224,18 +230,18 @@ sub repo_process {
 
 	unless (-d $localPath) {
 		# Flag non-dirs that block repos
-		print STDERR "ERROR: '$childPrefix$localPath' is not a directory\n";
+		print STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory\n";
 		return;
 	}
 
 	# Don't touch non-repo dirs with a bargepole
 	unless (&is_dir_repo_root($localPath)) {
-		print STDERR "ERROR: '$childPrefix$localPath' is not a Git repository\n";
+		print STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository\n";
 		return;
 	}
 
 	# For existing repos, don't clone but do update remote & configure
-	print STDERR "'$childPrefix$localPath' exists\n";
+	print STDERR "'$config->{RECURSE_PREFIX}$localPath' exists\n";
 	&repo_set_remote($localPath, $remoteURL);
 	&repo_config($localPath, $mediaPath);
 }
@@ -245,7 +251,7 @@ sub repo_clone_nocheckout {
 
 	my ($localPath, $remotePath) = @_;
 
-	print STDERR "  repo_clone_nocheckout: '$childPrefix$localPath'\n"
+	print STDERR "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_clone_nocheckout failed\n"
@@ -259,7 +265,7 @@ sub repo_config {
 
 	$mediaPath = '' unless defined $mediaPath;
 
-	print STDERR "  repo_config: '$childPrefix$localPath' with '$mediaPath'\n"
+	print STDERR "  repo_config: '$config->{RECURSE_PREFIX}$localPath' with '$mediaPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_config failed\n"
@@ -271,7 +277,7 @@ sub repo_check_out {
 
 	my ($localPath) = @_;
 
-	print STDERR "  repo_check_out: '$childPrefix$localPath'\n"
+	print STDERR "  repo_check_out: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_check_out failed\n"
@@ -283,20 +289,46 @@ sub repo_set_remote {
 
 	my ($localPath, $remotePath) = @_;
 
-	print STDERR "  repo_set_remote: '$childPrefix$localPath'\n"
+	print STDERR "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_set_remote failed\n"
 		if indir $localPath, sub {return system qq!git remote set-url origin "$remotePath" 1>&2!};
 }
 
+# Spawn a child process and pipe config to it instead of letting it look for a conffile
 sub recurse {
 	return unless $config->{OPT_RECURSE};
 
+	my ($kidPath) = @_;
+	my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
+
+	my $childConfig = {%$config};
+	&config_clean($childConfig);
+	$childConfig->{RECURSE_PREFIX} = "$config->{RECURSE_PREFIX}$kidPathRel/";
+
+	# Start the child process, stream an artificial config file to it, and close its STDIN handle; since we just copied 
+	# the hash, we shouldn't need to reset its internal iterator
+	my $sic;
+	my $pid = indir $kidPath, sub {return open3($sic, '>&STDOUT', '>&STDERR', qq! "$myPath" "$childConfig->{MODE}" !);};
+	die "$myName: failed to spawn recursive instance\n"
+		unless $pid and fileno($sic);
+	while (my($k, $v) = each %$childConfig) {
+		printf $sic ":$k:%s\n", $v // '';
+	}
+	close $sic;
+
+	# Wait for the child to finish and get its exit code
+	die "$myName: recursive instance failed\n"
+		if $pid != waitpid($pid, 0)  or  $?;
+}
+
+# Recurse a tree looking for listfiles and delegating them to child processes
+sub recurse_listfiles {
 	my ($dir) = @_;
 	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
 
-	die "$myName: recursion to '${\cat_path($childPrefix, $dir)}' failed\n"
+	die "$myName: recursion to '${\cat_path($config->{RECURSE_PREFIX}, $dir)}' failed\n"
 		unless opendir(my $handle, $dir);
 
 	my @kids = readdir($handle);
@@ -308,13 +340,11 @@ sub recurse {
 		next if $kid =~ /^\./;
 
 		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
-			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
-
-			indir $kidPath, sub {system qq!GRM_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!};
+			&recurse($kidPath);
 			next; # Recursion will have found any deeper listfiles, so bail on this dir
 		}
 
-		&recurse($kidPath);
+		&recurse_listfiles($kidPath);
 	}
 
 	closedir($handle);
