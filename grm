@@ -7,7 +7,8 @@ use Cwd qw(cwd getcwd);
 our $myPath = $0;
 our $myName = basename($myPath);
 
-our $listFilePrefix = '.grm';
+our $fnConf = '.grm.conf';
+our $fnList = '.grm.repos';
 
 our $childPrefix = $ENV{'GRM_RECURSE_PREFIX'} // '';
 
@@ -33,16 +34,20 @@ die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 &mode_set(shift @ARGV);
 
 our $treeFilter = cwd; # Save current directory so we can use it later
-&chdir_find_listfile;  # Change to the nearest ancestor dir containing a listfile
 
-while (my $listFile = <\Q$listFilePrefix\E*>){
-	&config_clean($config); # Clear out file-local variables between files
+my $pathConf = &find_conffile(); # Find the nearest conffile
+die "$myName: cannot open conffile '$pathConf'\n"
+	unless open(my $hConf, '<', $pathConf);
+&listfile_process($hConf, $pathConf);
+close($hConf);
 
-	die "$myName: cannot open listfile '$childPrefix$listFile'\n"
-		unless open(my $handle, '<', $listFile);
-	&listfile_process($handle, $listFile);
-	close($handle);
-}
+&config_clean($config); # Protect ourselves from conffile overreach
+
+&chdir_listfile; # Change to the nearest ancestor dir containing a listfile
+die "$myName: cannot open listfile '$childPrefix$fnList'\n"
+	unless open(my $hList, '<', $fnList);
+&listfile_process($hList, $fnList);
+close($hList);
 
 &recurse($treeFilter) if $config->{OPT_RECURSE};
 
@@ -55,7 +60,7 @@ sub listfile_process {
 
 	my $quotedPath  =  $listFile ? "'$childPrefix$listFile'" : '<HANDLE>';
 
-	print STDERR "$myName: processing listfile $quotedPath\n" if
+	print STDERR "$myName: processing $quotedPath\n" if
 		$config->{OPT_DEBUG_PRIMITIVES};
 
 	while (<$handle>){
@@ -122,14 +127,29 @@ sub config_clean {
 	$hr->{GM_DIR    } = undef;
 }
 
-sub chdir_find_listfile {
+sub find_conffile {
 	printf STDERR "  chdir_find_listfile: starting at '%s'\n", cwd
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	until (@{[<\Q$listFilePrefix\E*>]}) {
+	my $orig = cwd;
+
+	until (-e $fnConf) {
 		my $prev = cwd;
 
-		die "$myName: no '$childPrefix$listFilePrefix*' file found in current directory or any ancestor\n"
+		die "$myName: no '$fnConf' file found in current directory or any ancestor\n"
+			unless chdir('..') and cwd ne $prev;
+	}
+
+	my $result = cwd."/$fnConf";
+	chdir($orig);
+	return $result;
+}
+
+sub chdir_listfile {
+	until (-e $fnList) {
+		my $prev = cwd;
+		
+		die "$myName: no '$fnList' file found in current directory or any ancestor\n"
 			unless chdir('..') and cwd ne $prev;
 	}
 }
@@ -276,7 +296,7 @@ sub recurse {
 
 		next if $kid =~ /^\./;
 
-		if (@{[<\Q$kidPath/$listFilePrefix\E*>]}) { # Subdirs containing listfiles need recursive invocation
+		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
 			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
 
 			system qq!cd "$kidPath" && GRM_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!;
