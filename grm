@@ -7,9 +7,9 @@ use Cwd qw(cwd getcwd);
 our $myPath = $0;
 our $myName = basename($myPath);
 
-our $fnList = '.remotes';
+our $listFilePrefix = '.grm';
 
-our $childPrefix = $ENV{'GMC_RECURSE_PREFIX'} // '';
+our $childPrefix = $ENV{'GRM_RECURSE_PREFIX'} // '';
 
 use constant MODE_LIST => qw(
 	clone
@@ -26,10 +26,6 @@ use constant MODE_LIST_LS => join("\n", MODE_LIST);
 our $config = {
 	OPT_RECURSE => 1,
 	OPT_DEBUG_PRIMITIVES => 0,
-	CONFIG_CMD => '',
-	REMOTE_DIR => '',
-	LOCAL_DIR => '.',
-	GM_DIR => undef,
 };
 
 # Process the one and only possible command-line arg
@@ -39,10 +35,14 @@ die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 our $treeFilter = cwd; # Save current directory so we can use it later
 &chdir_find_listfile;  # Change to the nearest ancestor dir containing a listfile
 
-die "$myName: cannot open listfile '$childPrefix$fnList'\n"
-	unless open(my $handle, '<', $fnList);
-&listfile_process($handle, $fnList);
-close($handle);
+while (my $listFile = <\Q$listFilePrefix\E*>){
+	&config_clean($config); # Clear out file-local variables between files
+
+	die "$myName: cannot open listfile '$childPrefix$listFile'\n"
+		unless open(my $handle, '<', $listFile);
+	&listfile_process($handle, $listFile);
+	close($handle);
+}
 
 &recurse($treeFilter) if $config->{OPT_RECURSE};
 
@@ -114,14 +114,22 @@ sub parse_line {
 	return [map { ($_ // '') =~ s/^\s+|\s+$//gr } @cols]; # Each field: replace undef with empty then whitespace-trim
 }
 
+sub config_clean {
+	my ($hr) = @_;
+
+	$hr->{REMOTE_DIR} = undef;
+	$hr->{LOCAL_DIR } = undef;
+	$hr->{GM_DIR    } = undef;
+}
+
 sub chdir_find_listfile {
 	printf STDERR "  chdir_find_listfile: starting at '%s'\n", cwd
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	until (-e $fnList) {
+	until (@{[<\Q$listFilePrefix\E*>]}) {
 		my $prev = cwd;
 
-		die "$myName: no '$childPrefix$fnList' file found in current directory or any ancestor\n"
+		die "$myName: no '$childPrefix$listFilePrefix*' file found in current directory or any ancestor\n"
 			unless chdir('..') and cwd ne $prev;
 	}
 }
@@ -268,10 +276,10 @@ sub recurse {
 
 		next if $kid =~ /^\./;
 
-		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
+		if (@{[<\Q$kidPath/$listFilePrefix\E*>]}) { # Subdirs containing listfiles need recursive invocation
 			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
 
-			system qq!cd "$kidPath" && GMC_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!;
+			system qq!cd "$kidPath" && GRM_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!;
 			next; # Recursion will have found any deeper listfiles, so bail on this dir
 		}
 
