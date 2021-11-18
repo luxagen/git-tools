@@ -154,10 +154,21 @@ sub chdir_listfile {
 	}
 }
 
+sub indir ($&) {
+	my $dir = shift @_;
+	my $code = \&{shift @_};
+
+	my $orig = cwd;
+	chdir($dir);
+	my $result = $code->();
+	chdir($orig);
+	return $result;
+}
+
 sub is_dir_repo_root {
 	my ($localPath) = @_;
 
-	my $prefix = `cd "$localPath" && git rev-parse --show-prefix`;
+	my $prefix = indir $localPath, sub {return `git rev-parse --show-prefix`};
 
 	die "$myName: is_dir_repo_root failed\n"
 		if $?;
@@ -252,7 +263,7 @@ sub repo_config {
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_config failed\n"
-		if system qq!cd "$localPath" && $config->{CONFIG_CMD} "$mediaPath" 1>&2!;
+		if indir $localPath, sub {return system qq!$config->{CONFIG_CMD} "$mediaPath" 1>&2!};
 }
 
 sub repo_check_out {
@@ -264,7 +275,7 @@ sub repo_check_out {
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_check_out failed\n"
-		if system qq!cd "$localPath" && git reset --hard 1>&2!;
+		if indir $localPath, sub {return system qq!git reset --hard 1>&2!};
 }
 
 sub repo_set_remote {
@@ -276,13 +287,13 @@ sub repo_set_remote {
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_set_remote failed\n"
-		if system qq!cd "$localPath" && git remote set-url origin "$remotePath" 1>&2!;
+		if indir $localPath, sub {return system qq!git remote set-url origin "$remotePath" 1>&2!};
 }
 
 sub recurse {
 	return unless $config->{OPT_RECURSE};
 
-    my ($dir) = @_;
+	my ($dir) = @_;
 	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
 
 	die "$myName: recursion to '${\cat_path($childPrefix, $dir)}' failed\n"
@@ -299,7 +310,7 @@ sub recurse {
 		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
 			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
 
-			system qq!cd "$kidPath" && GRM_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!;
+			indir $kidPath, sub {system qq!GRM_RECURSE_PREFIX="$kidPathRel/" "$myPath" "$config->{MODE}"!};
 			next; # Recursion will have found any deeper listfiles, so bail on this dir
 		}
 
