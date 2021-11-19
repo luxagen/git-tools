@@ -43,7 +43,7 @@ else { # STDIN is likely a pipe; configure from STDIN instead of a conffile
 	&listfile_process(*STDIN, undef);
 }
 
-&config_clean($config); # Protect ourselves from conffile overreach
+$config = &config_clean($config); # Protect ourselves from conffile overreach
 
 # Process the one and only possible command-line arg
 die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
@@ -134,6 +134,12 @@ sub config_clean {
 	delete $hr->{REMOTE_DIR};
 	delete $hr->{LOCAL_DIR };
 	delete $hr->{GM_DIR    };
+
+	return $hr;
+}
+
+sub config_clone {
+	return &config_clean({%$config}); # Copy and redact the config
 }
 
 # : => \: then ^(\s) => ^\? then (\s)$ => \?$
@@ -333,8 +339,7 @@ sub recurse {
 	my ($kidPath) = @_;
 	my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
 
-	my $childConfig = {%$config};
-	&config_clean($childConfig);
+	my $childConfig = &config_clone;
 	$childConfig->{RECURSE_PREFIX} = "$config->{RECURSE_PREFIX}$kidPathRel/";
 
 	# Start the child process, stream an artificial config file to it, and close its STDIN handle; since we just copied 
