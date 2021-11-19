@@ -122,9 +122,10 @@ sub parse_line {
 	$line =~ s/#.*$//;        # Remove comments (can be suffix)
 	return undef if $line =~ /^\s*$/; # Skip lines of pure whitespace
 
-	my @cols = split(':', $line, 3); # Split into (max) 3 cols
-	$#cols = 2; # Pad to 3 cols with undefs
-	return [map { ($_ // '') =~ s/^\s+|\s+$//gr } @cols]; # Each field: replace undef with empty then whitespace-trim
+	# Split into (max) 3 fields (ignoring escaped separators), pad to 3 fields with undef, and unescape them
+	my @cols = &unescape_fields(split(qr/(?<!\\):/, $line, 3));
+	$#cols = 2;
+	return \@cols;
 }
 
 sub config_clean {
@@ -133,6 +134,23 @@ sub config_clean {
 	$hr->{REMOTE_DIR} = undef;
 	$hr->{LOCAL_DIR } = undef;
 	$hr->{GM_DIR    } = undef;
+}
+
+# : => \: then ^(\s) => ^\? then (\s)$ => \?$
+sub escape_fields {
+	return map {($_//'') =~ s/(?=[\:])|(?=^\s)|(?=\s$)/\\/gr} @_;
+}
+
+sub unescape_fields {
+	return map { ($_//'') =~ s/^\s+|\\(.)|\s+$/(defined $1 ? $1 : '')/gre } @_;
+}
+
+sub config_print {
+	my ($fh, $c) = @_;
+
+	while (my($k, $v) = &escape_fields(each %$c)) {
+		printf $fh ":$k:%s\n", $v // '';
+	}
 }
 
 sub find_conffile {
@@ -325,9 +343,7 @@ sub recurse {
 	my $pid = indir $kidPath, sub {return open3($sic, '>&STDOUT', '>&STDERR', qq! "$myPath" "$childConfig->{MODE}" !);};
 	die "$myName: failed to spawn recursive instance\n"
 		unless $pid and fileno($sic);
-	while (my($k, $v) = each %$childConfig) {
-		printf $sic ":$k:%s\n", $v // '';
-	}
+	config_print $sic, $childConfig;
 	close $sic;
 
 	# Wait for the child to finish and get its exit code
