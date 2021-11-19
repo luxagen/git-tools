@@ -141,7 +141,7 @@ sub recurse {
 		my $kidPath = "$dir/$kid";
 		next if (not -d $kidPath);
 
-		next if $kid eq "." or $kid eq ".." or $kid =~ /.git$/;
+		next if $kid =~ /^\./;
 
 		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
 			my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
