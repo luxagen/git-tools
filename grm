@@ -11,7 +11,6 @@ our $myPath = $0;
 our $myName = basename($myPath);
 
 our $fnConf = '.grm.conf';
-our $fnList = '.grm.repos';
 
 use constant MODE_LIST => qw(
 	clone
@@ -45,6 +44,9 @@ else { # STDIN is likely a pipe; configure from STDIN instead of a conffile
 
 $config = &config_clean($config); # Protect ourselves from conffile overreach
 
+die "$myName: configuration is missing LIST_FN"
+	unless defined($config->{LIST_FN});
+
 # Process the one and only possible command-line arg
 die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 &mode_set(shift @ARGV);
@@ -52,9 +54,9 @@ die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 our $treeFilter = cwd; # Save current directory so we can use it later
 
 &chdir_listfile; # Change to the nearest ancestor dir containing a listfile
-die "$myName: cannot open listfile '$config->{RECURSE_PREFIX}$fnList'\n"
-	unless open(my $handle, '<', $fnList);
-&listfile_process($handle, $fnList);
+die "$myName: cannot open listfile '$config->{RECURSE_PREFIX}$config->{LIST_FN}'\n"
+	unless open(my $handle, '<', $config->{LIST_FN});
+&listfile_process($handle, $config->{LIST_FN});
 close($handle);
 
 &recurse_listfiles($treeFilter) if $config->{OPT_RECURSE};
@@ -178,10 +180,10 @@ sub find_conffile {
 }
 
 sub chdir_listfile {
-	until (-e $fnList) {
+	until (-e $config->{LIST_FN}) {
 		my $prev = cwd;
 		
-		die "$myName: no '$fnList' file found in current directory or any ancestor\n"
+		die "$myName: no '$config->{LIST_FN}' file found in current directory or any ancestor\n"
 			unless chdir('..') and cwd ne $prev;
 	}
 }
@@ -372,7 +374,7 @@ sub recurse_listfiles {
 
 		next if $kid =~ /^\./;
 
-		if (-e "$kidPath/$fnList") { # Subdirs containing listfiles need recursive invocation
+		if (-e "$kidPath/$config->{LIST_FN}") { # Subdirs containing listfiles need recursive invocation
 			&recurse($kidPath);
 			next; # Recursion will have found any deeper listfiles, so bail on this dir
 		}
