@@ -249,6 +249,7 @@ sub repo_process {
 	my ($localPath, $remotePath, $mediaPath) = @_;
 
 	my $remoteURL = "$config->{REMOTE_BASE_URL}/$remotePath";
+	$mediaPath = cat_path($config->{GM_BASE_PATH}, $mediaPath);
 
 	# These return in order to maximise speed
 	return print "$remotePath\n"            if $config->{MODE_LIST_RREL};
