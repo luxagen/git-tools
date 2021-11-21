@@ -322,6 +322,24 @@ sub repo_check_out {
 		if indir $localPath, sub {return run_sync_redir qw! git reset --hard !;}
 }
 
+sub remote_fallback_inv {
+	no warnings;
+
+	my ($remoteURL) = @_;
+
+	my $pid = open3 undef, '>&STDERR', *DEVNULL, qw! git remote set-url origin !, $remoteURL;
+	die "$myName: failed to spawn git\n"
+		unless $pid;
+
+	die "$myName: waitpid failed\n"
+		if $pid != waitpid($pid, 0);
+
+	return $?
+		unless 32768 == $?; # Apparently this should be 3 but the git-remote docs are made of lies
+
+	return run_sync_redir qw! git remote add -f origin     !, $remoteURL;
+}
+
 sub repo_set_remote {
 	return unless $config->{MODE_SET_REMOTE};
 
@@ -331,7 +349,7 @@ sub repo_set_remote {
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_set_remote failed\n"
-		if indir $localPath, sub {return run_sync_redir qw! git remote set-url origin !, "$remotePath";};
+		if indir $localPath, sub {return remote_fallback_inv($remotePath);};
 }
 
 # Spawn a child process and pipe config to it instead of letting it look for a conffile
