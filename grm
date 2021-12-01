@@ -336,7 +336,7 @@ sub remote_fallback_inv {
 		if $pid != waitpid($pid, 0);
 
 	return $?
-		unless 32768 == $?; # Apparently this should be 3 but the git-remote docs are made of lies
+		unless 512 == $?; # Apparently this should be 3 but the git-remote docs are made of lies
 
 	return run_sync_redir qw! git remote add -f origin     !, $remoteURL;
 }
