@@ -10,6 +10,7 @@ sub run_sync_redir;
 our $myPath = $0;
 our $myName = basename($myPath);
 
+our $SEPARATOR = ':';
 our $fnConf = '.grm.conf';
 
 use constant MODE_LIST => qw(
@@ -125,7 +126,7 @@ sub parse_line {
 	return undef if $line =~ /^\s*$/; # Skip lines of pure whitespace
 
 	# Split into (max) 3 fields (ignoring escaped separators), pad to 3 fields with undef, and unescape them
-	my @cols = &unescape_fields(split(qr/(?<!\\):/, $line, 3));
+	my @cols = &unescape_fields(split(qr/(?<!\\)$SEPARATOR/, $line, 3));
 	$#cols = 2;
 	return \@cols;
 }
