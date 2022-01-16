@@ -90,8 +90,6 @@ sub listfile_process {
 		my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
 		my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
 
-		die "$myName: $quotedPath does not define REMOTE_BASE_URL\n"
-			unless defined $config->{REMOTE_BASE_URL};
 
 		&repo_process($localPath, $remotePath, $mediaPath)
 			if cat_path(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
@@ -249,7 +247,7 @@ sub mode_set {
 sub repo_process {
 	my ($localPath, $remotePath, $mediaPath) = @_;
 
-	my $remoteURL = "$config->{REMOTE_BASE_URL}/$remotePath";
+	my $remoteURL  =  (length $config->{REMOTE_BASE_URL}) ? "$config->{REMOTE_BASE_URL}/$remotePath" : $remotePath;
 	$mediaPath = cat_path($config->{GM_BASE_PATH}, $mediaPath);
 
 	# These return in order to maximise speed
