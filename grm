@@ -83,13 +83,15 @@ sub listfile_process {
 			next;
 		}
 
-		$LOCAL_REL = $REMOTE_REL unless $LOCAL_REL;
-		$GM_REL = $REMOTE_REL unless $GM_REL;
+		$REMOTE_REL =~ /(?:.*(?<!\\)\/)?(.*?)(?:.git)?$/;
+		my $repoName = $1;
+
+		$LOCAL_REL = $repoName unless $LOCAL_REL;
+		$GM_REL = $repoName unless $GM_REL;
 
 		my $remotePath = &cat_path($config->{REMOTE_DIR}, $REMOTE_REL);
 		my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
 		my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
-
 
 		&repo_process($localPath, $remotePath, $mediaPath)
 			if cat_path(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
