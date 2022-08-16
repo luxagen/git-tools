@@ -71,10 +71,10 @@ sub listfile_process {
 
 	my $quotedPath  =  $listFile ? "'$config->{RECURSE_PREFIX}$listFile'" : '<HANDLE>';
 
-	print STDERR "$myName: processing $quotedPath\n" if
+	warn "$myName: processing $quotedPath\n" if
 		$config->{OPT_DEBUG_PRIMITIVES};
 
-	while (<$handle>){
+	while (<$handle>) {
 		next unless defined (my $result = parse_line($_));
 		my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = @{$result};
 
@@ -257,7 +257,7 @@ sub repo_process {
 	return print "$remoteURL\n"             if $config->{MODE_LIST_RURL};
 	return print "$config->{RECURSE_PREFIX}$localPath\n" if $config->{MODE_LIST_LREL};
 
-	print STDERR "  repo_process: '$config->{RECURSE_PREFIX}$localPath'\n"
+	warn "  repo_process: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	unless (-e $localPath) {
@@ -270,18 +270,18 @@ sub repo_process {
 
 	unless (-d $localPath) {
 		# Flag non-dirs that block repos
-		print STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory\n";
+		warn "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory\n";
 		return;
 	}
 
 	# Don't touch non-repo dirs with a bargepole
 	unless (&is_dir_repo_root($localPath)) {
-		print STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository\n";
+		warn "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository\n";
 		return;
 	}
 
 	# For existing repos, don't clone but do update remote & configure
-	print STDERR "'$config->{RECURSE_PREFIX}$localPath' exists\n";
+	warn "'$config->{RECURSE_PREFIX}$localPath' exists\n";
 	&repo_set_remote($localPath, $remoteURL);
 	&repo_config($localPath, $mediaPath);
 }
@@ -291,7 +291,7 @@ sub repo_clone_nocheckout {
 
 	my ($localPath, $remotePath) = @_;
 
-	print STDERR "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'\n"
+	warn "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_clone_nocheckout failed\n"
@@ -305,7 +305,7 @@ sub repo_config {
 
 	$mediaPath = '' unless defined $mediaPath;
 
-	print STDERR "  repo_config: '$config->{RECURSE_PREFIX}$localPath' with '$mediaPath'\n"
+	warn "  repo_config: '$config->{RECURSE_PREFIX}$localPath' with '$mediaPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_config failed\n"
@@ -317,7 +317,7 @@ sub repo_check_out {
 
 	my ($localPath) = @_;
 
-	print STDERR "  repo_check_out: '$config->{RECURSE_PREFIX}$localPath'\n"
+	warn "  repo_check_out: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_check_out failed\n"
@@ -347,7 +347,7 @@ sub repo_set_remote {
 
 	my ($localPath, $remotePath) = @_;
 
-	print STDERR "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'\n"
+	warn "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_set_remote failed\n"
@@ -390,7 +390,7 @@ sub recurse_listfiles {
 
 	foreach my $kid (@kids) {
 		my $kidPath = cat_path($dir, $kid);
-		next if (not -d $kidPath);
+		next unless -d $kidPath;
 
 		next if $kid =~ /^\./;
 
