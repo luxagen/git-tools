@@ -35,7 +35,7 @@ if (-t STDIN) { # STDIN is a TTY, so get configuration from the 'nearest' conffi
 
 	# Special case: antirecurse to find the conffile and process it
 	my $pathConf = &find_conffile();
-	open(my $handle, '<', $pathConf) or die "$myName: cannot open '$pathConf'\n";
+	open(my $handle, '<:encoding(UTF-8)', $pathConf) or die "$myName: cannot open '$pathConf'\n";
 	&listfile_process($handle, $pathConf);
 	close($handle);
 }
@@ -56,7 +56,7 @@ our $treeFilter = cwd; # Save current directory so we can use it later
 
 &chdir_listfile; # Change to the nearest ancestor dir containing a listfile
 die "$myName: cannot open listfile '$config->{RECURSE_PREFIX}$config->{LIST_FN}'\n"
-	unless open(my $handle, '<', $config->{LIST_FN});
+	unless open(my $handle, '<:encoding(UTF-8)', $config->{LIST_FN});
 &listfile_process($handle, $config->{LIST_FN});
 close($handle);
 
