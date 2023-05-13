@@ -328,8 +328,7 @@ sub repo_cmd {
 
 	my ($localPath) = @_;
 
-	die "$myName: repo_config failed\n"
-		if indir $localPath, sub {return run_sync_redir 'git', @ARGV;};
+	indir $localPath, sub {return run_sync_redir 'git', @ARGV;};
 }
 
 sub repo_check_out {
