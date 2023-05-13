@@ -15,6 +15,7 @@ our $fnConf = '.grm.conf';
 
 use constant MODE_LIST => qw(
 	clone
+	git
 	set-remote
 	configure
 	list-rrel
@@ -49,7 +50,6 @@ die "$myName: configuration is missing LIST_FN"
 	unless defined($config->{LIST_FN});
 
 # Process the one and only possible command-line arg
-die "$myName: too many arguments\n" unless scalar @ARGV <= 1;
 &mode_set(shift @ARGV);
 
 our $treeFilter = cwd; # Save current directory so we can use it later
@@ -230,6 +230,16 @@ sub mode_set {
 
 	$config->{MODE} = $mode;
 
+	if ($mode eq 'git') {
+		$config->{MODE_CLONE     } = 0;
+		$config->{MODE_GIT       } = 1;
+		$config->{MODE_SET_REMOTE} = 1;
+		$config->{MODE_CONFIGURE } = 1;
+		return;
+	}
+
+	die "$myName: too many arguments\n" unless scalar @ARGV <= 0;
+
 	if ($mode eq 'run') {
 		$config->{MODE_CLONE     } = 1;
 		$config->{MODE_SET_REMOTE} = 1;
@@ -284,6 +294,7 @@ sub repo_process {
 	warn "'$config->{RECURSE_PREFIX}$localPath' exists\n";
 	&repo_set_remote($localPath, $remoteURL);
 	&repo_config($localPath, $mediaPath);
+	&repo_cmd($localPath);
 }
 
 sub repo_clone_nocheckout {
@@ -310,6 +321,15 @@ sub repo_config {
 
 	die "$myName: repo_config failed\n"
 		if indir $localPath, sub {return run_sync_redir $config->{CONFIG_CMD}, $mediaPath;};
+}
+
+sub repo_cmd {
+	return unless $config->{MODE_GIT};
+
+	my ($localPath) = @_;
+
+	die "$myName: repo_config failed\n"
+		if indir $localPath, sub {return run_sync_redir 'git', @ARGV;};
 }
 
 sub repo_check_out {
