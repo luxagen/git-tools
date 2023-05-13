@@ -367,7 +367,7 @@ sub recurse {
 	# Start the child process, stream an artificial config file to it, and close its STDIN handle; since we just copied 
 	# the hash, we shouldn't need to reset its internal iterator
 	my $sic;
-	my $pid = indir $kidPath, sub {return open3($sic, '>&STDOUT', '>&STDERR', qq! "$myPath" "$childConfig->{MODE}" !);};
+	my $pid = indir $kidPath, sub {return open3($sic, '>&STDOUT', '>&STDERR', $myPath, $childConfig->{MODE} );};
 	die "$myName: failed to spawn recursive instance\n"
 		unless $pid and fileno($sic);
 	config_print $sic, $childConfig;
