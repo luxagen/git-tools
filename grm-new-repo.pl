@@ -4,6 +4,20 @@ use strict;
 use warnings;
 use IPC::Run qw(run);
 
+# Helper function to run git commands
+sub run_git {
+    my ($capture_output, @args) = @_;
+    
+    if ($capture_output) {
+        my $out = '';
+        my $err = '';
+        my $success = run(['git', @args], '>', \$out, '2>', \$err);
+        return ($success, $out, $err);
+    } else {
+        return run(['git', @args]);
+    }
+}
+
 # Check required environment variables
 my @missing;
 for my $var (qw(GRM_CFGCMD GRM_RPATH_TEMPLATE GRM_RLOGIN)) {
@@ -47,10 +61,10 @@ if ($reply !~ /^[Yy]$/) {
 }
 
 # Initialize git repository
-run(['git', 'init', '-q']);
+&run_git(0, 'init', '-q');
 
 # Run the config command
-my @cfg_cmd = split /\s+/, $ENV{GRM_CFGCMD}; // TODO remove split
+my @cfg_cmd = split /\s+/, $ENV{GRM_CFGCMD}; # TODO: remove split
 run(\@cfg_cmd);
 
 # Set error handling mode (no direct equivalent in IPC::Run, handled by checking return values)
@@ -62,19 +76,17 @@ run(['ssh', $ENV{GRM_RLOGIN}, $ssh_cmd]);
 my $ssh_rpath = "ssh://$ENV{GRM_RLOGIN}$grm_rpath";
 
 # Check if remote exists, add or update it accordingly
-my $out;
-my $err;
-my $remote_exists = run(['git', 'remote', 'get-url', 'origin'], '>', \$out, '2>', \$err) ? 1 : 0;
+my ($remote_exists, $out, $err) = &run_git(1, 'remote', 'get-url', 'origin');
 
 if ($remote_exists) {
     # Remote exists, update it
-    run(['git', 'remote', 'set-url', 'origin', $ssh_rpath]);
-    run(['git', 'fetch', 'origin']);
+    &run_git(0, 'remote', 'set-url', 'origin', $ssh_rpath);
+    &run_git(0, 'fetch', 'origin');
 } else {
     # Remote doesn't exist, add it
-    run(['git', 'remote', 'add', '-f', 'origin', $ssh_rpath]);
+    &run_git(0, 'remote', 'add', '-f', 'origin', $ssh_rpath);
 }
 
 if ($virgin) {
-    run(['git', 'checkout', 'master']);
+    &run_git(0, 'checkout', 'master');
 }
