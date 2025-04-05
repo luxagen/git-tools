@@ -17,7 +17,7 @@ if (@missing) {
 }
 
 # Determine whether this dir is already a git repo
-my $virgin = system("test -d .git") != 0 ? 1 : 0;
+my $virgin = (system("test -d .git") != 0);
 
 # Set path base
 my $grm_rpath_base = '/git/music-projects';
@@ -66,6 +66,6 @@ if ($remote_exists) {
     system("git remote add -f origin $ssh_rpath");
 }
 
-if ($virgin == 1) {
+if ($virgin) {
     system("git checkout master");
 }
