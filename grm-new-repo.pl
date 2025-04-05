@@ -4,15 +4,15 @@ use strict;
 use warnings;
 
 # Check required environment variables
-my $missing = "";
+my @missing;
 for my $var (qw(GRM_CFGCMD GRM_RPATH_TEMPLATE GRM_RLOGIN)) {
     if (!defined $ENV{$var}) {
-        $missing .= "$var ";
+        push @missing, $var;
     }
 }
 
-if ($missing ne "") {
-    print "The following environment variables must be set: $missing\n";
+if (@missing) {
+    print STDERR "The following environment variables must be set: ", join(" ", @missing), "\n";
     exit 2;
 }
 
