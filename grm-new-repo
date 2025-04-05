@@ -1,0 +1,60 @@
+#!/bin/bash
+
+# Check required environment variables
+missing=""
+for var in GRM_CFGCMD GRM_RPATH_TEMPLATE GRM_RLOGIN; do
+	[[ ! -v $var ]] && missing+="$var "
+done
+
+if [[ -n "$missing" ]]; then
+	echo "The following environment variables must be set: $missing"
+	exit 2
+fi
+
+[[ -d .git ]]; VIRGIN="$?" # Determine whether this dir is already a git repo
+
+# Set path base
+GRM_RPATH_BASE=''
+
+LREL=`grm list-lrel`
+RREL=`grm list-rrel`
+GRM_RPATH="$GRM_RPATH_BASE/$RREL"
+[[ $GRM_RPATH == *.git ]] || GRM_RPATH+=".git"
+
+# There must be exactly one GRM-known (sub)directory and it must be .
+if [[ -z "$RREL" ]] || [[ ! "$PWD" =~ "$LREL"$ ]]; then
+	echo 'The current directory is unknown to GRM!'
+	exit 1
+fi
+
+read -p "About to create remote repo '$GRM_RPATH'; are you sure? " -n 1 -r
+echo
+if [[ ! $REPLY =~ ^[Yy]$ ]]
+then
+	echo "(aborted)"
+	exit 0
+fi
+
+git init -q
+$GRM_CFGCMD
+
+set -e
+
+# Create new remote repo based on remote template
+echo -ne "$GRM_RPATH\0" | ssh "$GRM_RLOGIN" "xargs -0 -n 1 -- cp -na --reflink=auto '$GRM_RPATH_BASE/$GRM_RPATH_TEMPLATE'";
+
+SSH_RPATH="ssh://$GRM_RLOGIN$GRM_RPATH"
+
+# Check if remote exists, add or update it accordingly
+if git remote get-url origin &>/dev/null; then
+    # Remote exists, update it
+    echo -ne "$SSH_RPATH\0" | xargs -0 -n 1 -- git remote set-url origin
+	git fetch origin
+else
+    # Remote doesn't exist, add it
+    echo -ne "$SSH_RPATH\0" | xargs -0 -n 1 -- git remote add -f origin
+fi
+
+if (( 1 == $VIRGIN )); then
+	git checkout master
+fi
