@@ -17,7 +17,7 @@ if (@missing) {
 }
 
 # Determine whether this dir is already a git repo
-my $virgin = (system("test -d .git") != 0);
+my $virgin = !(-d ".git");
 
 # Set path base
 my $grm_rpath_base = '/git/music-projects';
