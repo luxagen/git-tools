@@ -24,24 +24,27 @@ use constant MODE_LIST => qw(
 	run
 );
 
-use constant MODE_LIST_LS => join("\n", MODE_LIST);
+use constant MODE_LIST_LS => join("\n",MODE_LIST);
 
-our $config = {
+our $config=
+{
 	OPT_DEBUG_PRIMITIVES => 0,
 };
 
-if (-t STDIN) { # STDIN is a TTY, so get configuration from the 'nearest' conffile
+if (-t STDIN) # STDIN is a TTY, so get configuration from the 'nearest' conffile
+{
 	$config->{OPT_RECURSE   } =  1;
 	$config->{RECURSE_PREFIX} = '';
 
 	# Special case: antirecurse to find the conffile and process it
 	my $pathConf = &find_conffile();
-	open(my $handle, '<:encoding(UTF-8)', $pathConf) or die "$myName: cannot open '$pathConf'\n";
-	&listfile_process($handle, $pathConf);
+	open(my $handle,'<:encoding(UTF-8)',$pathConf) or die "$myName: cannot open '$pathConf'\n";
+	&listfile_process($handle,$pathConf);
 	close($handle);
 }
-else { # STDIN is likely a pipe; configure from STDIN instead of a conffile
-	&listfile_process(*STDIN, undef);
+else # STDIN is likely a pipe; configure from STDIN instead of a conffile
+{
+	&listfile_process(*STDIN,undef);
 }
 
 $config = &config_clean($config); # Protect ourselves from conffile overreach
@@ -56,8 +59,8 @@ our $treeFilter = cwd; # Save current directory so we can use it later
 
 &chdir_listfile; # Change to the nearest ancestor dir containing a listfile
 die "$myName: cannot open listfile '$config->{RECURSE_PREFIX}$config->{LIST_FN}'\n"
-	unless open(my $handle, '<:encoding(UTF-8)', $config->{LIST_FN});
-&listfile_process($handle, $config->{LIST_FN});
+	unless open(my $handle,'<:encoding(UTF-8)',$config->{LIST_FN});
+&listfile_process($handle,$config->{LIST_FN});
 close($handle);
 
 &recurse_listfiles($treeFilter) if $config->{OPT_RECURSE};
@@ -66,19 +69,22 @@ exit 0;
 
 ########################################################################################################################
 
-sub listfile_process {
-	my ($handle, $listFile) = @_;
+sub listfile_process
+{
+	my ($handle,$listFile) = @_;
 
 	my $quotedPath  =  $listFile ? "'$config->{RECURSE_PREFIX}$listFile'" : '<HANDLE>';
 
 	warn "$myName: processing $quotedPath\n" if
 		$config->{OPT_DEBUG_PRIMITIVES};
 
-	while (<$handle>) {
+	while (<$handle>)
+	{
 		next unless defined (my $result = parse_line($_));
-		my ($REMOTE_REL, $LOCAL_REL, $GM_REL) = @{$result};
+		my ($REMOTE_REL,$LOCAL_REL,$GM_REL) = @{$result};
 
-		unless ($REMOTE_REL) {
+		unless ($REMOTE_REL)
+		{
 			$config->{$LOCAL_REL} = $GM_REL;
 			next;
 		}
@@ -89,20 +95,22 @@ sub listfile_process {
 		$LOCAL_REL = $repoName unless $LOCAL_REL;
 		$GM_REL = $repoName unless $GM_REL;
 
-		my $remotePath = &cat_path($config->{REMOTE_DIR}, $REMOTE_REL);
-		my $localPath  = &cat_path($config->{LOCAL_DIR }, $LOCAL_REL );
-		my $mediaPath  = &cat_path($config->{GM_DIR    }, $GM_REL    );
+		my $remotePath = &cat_path($config->{REMOTE_DIR},$REMOTE_REL);
+		my $localPath  = &cat_path($config->{LOCAL_DIR },$LOCAL_REL );
+		my $mediaPath  = &cat_path($config->{GM_DIR    },$GM_REL    );
 
-		&repo_process($localPath, $remotePath, $mediaPath)
-			if cat_path(cwd, $localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
+		&repo_process($localPath,$remotePath,$mediaPath)
+			if cat_path(cwd,$localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/; # Skip items outside the tree we were run in
 	}
 }
 
-sub cat_path {
+sub cat_path
+{
 	my @pieces = grep {defined $_ and $_ ne ''} @_;
 
 	my $result = undef;
-	for my $piece (reverse @pieces) {
+	for my $piece (reverse @pieces)
+	{
 		$piece =~ s/^\.\///;
 
 		$result  =  defined $result ? "$piece/$result" : $piece;
@@ -110,10 +118,11 @@ sub cat_path {
 		return $result if $piece =~ /^\//;
 	}
 
-	return $result;	
+	return $result;
 }
 
-sub parse_line {
+sub parse_line
+{
 	my ($line) = @_;
 
 	chomp $line;
@@ -122,12 +131,13 @@ sub parse_line {
 	return undef if $line =~ /^\s*$/; # Skip lines of pure whitespace
 
 	# Split into (max) 3 fields (ignoring escaped separators), pad to 3 fields with undef, and unescape them
-	my @cols = &unescape_fields(split(qr/(?<!\\)\Q$SEPARATOR\E/, $line, 3));
+	my @cols = &unescape_fields(split(qr/(?<!\\)\Q$SEPARATOR\E/,$line,3));
 	$#cols = 2;
 	return \@cols;
 }
 
-sub config_clean {
+sub config_clean
+{
 	my ($hr) = @_;
 
 	delete $hr->{REMOTE_DIR};
@@ -137,34 +147,41 @@ sub config_clean {
 	return $hr;
 }
 
-sub config_clone {
+sub config_clone
+{
 	return &config_clean({%$config}); # Copy and redact the config
 }
 
 # : => \: then ^(\s) => ^\? then (\s)$ => \?$
-sub escape_fields {
+sub escape_fields
+{
 	return map {($_//'') =~ s/(?=[\:])|(?=^\s)|(?=\s$)/\\/gr} @_;
 }
 
-sub unescape_fields {
+sub unescape_fields
+{
 	return map { ($_//'') =~ s/^\s+|\\(.)|\s+$/(defined $1 ? $1 : '')/gre } @_;
 }
 
-sub config_print {
-	my ($fh, $c) = @_;
+sub config_print
+{
+	my ($fh,$c) = @_;
 
-	while (my($k, $v) = &escape_fields(each %$c)) {
-		printf $fh "$SEPARATOR $k $SEPARATOR %s\n", $v // '';
+	while (my($k,$v) = &escape_fields(each %$c))
+	{
+		printf $fh "$SEPARATOR $k $SEPARATOR %s\n",$v // '';
 	}
 }
 
-sub find_conffile {
-	printf STDERR "  chdir_find_listfile: starting at '%s'\n", cwd
+sub find_conffile
+{
+	printf STDERR "  chdir_find_listfile: starting at '%s'\n",cwd
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	my $orig = cwd;
 
-	until (-e $fnConf) {
+	until (-e $fnConf)
+	{
 		my $prev = cwd;
 
 		die "$myName: no '$fnConf' file found in current directory or any ancestor\n"
@@ -176,8 +193,10 @@ sub find_conffile {
 	return $result;
 }
 
-sub chdir_listfile {
-	until (-e $config->{LIST_FN}) {
+sub chdir_listfile
+{
+	until (-e $config->{LIST_FN})
+	{
 		my $prev = cwd;
 		
 		die "$myName: no '$config->{LIST_FN}' file found in current directory or any ancestor\n"
@@ -185,17 +204,19 @@ sub chdir_listfile {
 	}
 }
 
-sub run_sync_redir(@) {
+sub run_sync_redir(@)
+{
 	my $pid;
 
 	die "$myName: failed to run {@_}\n"
-		unless $pid = open3(undef, '>&STDERR', '>&STDERR', @_)
-		and $pid == waitpid $pid, 0;
+		unless $pid = open3(undef,'>&STDERR','>&STDERR',@_)
+		and $pid == waitpid $pid,0;
 
 	return $?;
 }
 
-sub indir ($&) {
+sub indir ($&)
+{
 	my $dir = shift @_;
 	my $code = \&{shift @_};
 
@@ -206,10 +227,11 @@ sub indir ($&) {
 	return $result;
 }
 
-sub is_dir_repo_root {
+sub is_dir_repo_root
+{
 	my ($localPath) = @_;
 
-	my $prefix = indir $localPath, sub {return qx! git rev-parse --show-prefix !};
+	my $prefix = indir $localPath,sub {return qx! git rev-parse --show-prefix !};
 
 	die "$myName: is_dir_repo_root failed\n"
 		if $?;
@@ -218,15 +240,17 @@ sub is_dir_repo_root {
 	return $prefix eq '';
 }
 
-sub mode_set {
+sub mode_set
+{
 	my ($mode) = @_;
 
 	die "$myName: missing mode\n" if not defined($mode) or $mode eq '';
-	die "$myName: no such mode '$mode'; must be one of:\n${\MODE_LIST_LS}\n" unless grep(/^$mode$/, MODE_LIST);
+	die "$myName: no such mode '$mode'; must be one of:\n${\MODE_LIST_LS}\n" unless grep(/^$mode$/,MODE_LIST);
 
 	$config->{MODE} = $mode;
 
-	if ($mode eq 'git') {
+	if ($mode eq 'git')
+	{
 		$config->{MODE_CLONE     } = 0;
 		$config->{MODE_GIT       } = 1;
 		$config->{MODE_SET_REMOTE} = 1;
@@ -236,11 +260,13 @@ sub mode_set {
 
 	die "$myName: too many arguments\n" unless scalar @ARGV <= 0;
 
-	if ($mode eq 'run') {
+	if ($mode eq 'run')
+	{
 		$config->{MODE_CLONE     } = 1;
 		$config->{MODE_SET_REMOTE} = 1;
 	}
-	else {
+	else
+	{
 		$config->{MODE_CLONE     } = $mode eq       'clone';
 		$config->{MODE_SET_REMOTE} = $mode eq  'set-remote';
 		$config->{MODE_CONFIGURE } = $mode eq   'configure';
@@ -252,11 +278,12 @@ sub mode_set {
 	$config->{MODE_CONFIGURE} ||= $config->{MODE_CLONE}; # Cloning requires configuration as phase 2/3, before checkout
 }
 
-sub repo_process {
-	my ($localPath, $remotePath, $mediaPath) = @_;
+sub repo_process
+{
+	my ($localPath,$remotePath,$mediaPath) = @_;
 
 	my $remoteURL  =  (length $config->{REMOTE_BASE_URL}) ? "$config->{REMOTE_BASE_URL}/$remotePath" : $remotePath;
-	$mediaPath = cat_path($config->{GM_BASE_PATH}, $mediaPath);
+	$mediaPath = cat_path($config->{GM_BASE_PATH},$mediaPath);
 
 	# These return in order to maximise speed
 	return print "$remotePath\n"            if $config->{MODE_LIST_RREL};
@@ -266,49 +293,54 @@ sub repo_process {
 	warn "  repo_process: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	unless (-e $localPath) {
+	unless (-e $localPath)
+	{
 		# We need to configure after clone but before checkout, thus the three steps
-		&repo_clone_nocheckout($localPath, $remoteURL);
-		&repo_config($localPath, $mediaPath);
+		&repo_clone_nocheckout($localPath,$remoteURL);
+		&repo_config($localPath,$mediaPath);
 		&repo_check_out($localPath);
 		return;
 	}
 
-	unless (-d $localPath) {
+	unless (-d $localPath)
+	{
 		# Flag non-dirs that block repos
 		warn "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory\n";
 		return;
 	}
 
 	# Don't touch non-repo dirs with a bargepole
-	unless (&is_dir_repo_root($localPath)) {
+	unless (&is_dir_repo_root($localPath))
+	{
 		warn "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository\n";
 		return;
 	}
 
 	# For existing repos, don't clone but do update remote & configure
 	warn "'$config->{RECURSE_PREFIX}$localPath' exists\n";
-	&repo_set_remote($localPath, $remoteURL);
-	&repo_config($localPath, $mediaPath);
+	&repo_set_remote($localPath,$remoteURL);
+	&repo_config($localPath,$mediaPath);
 	&repo_cmd($localPath);
 }
 
-sub repo_clone_nocheckout {
+sub repo_clone_nocheckout
+{
 	return unless $config->{MODE_CLONE};
 
-	my ($localPath, $remotePath) = @_;
+	my ($localPath,$remotePath) = @_;
 
 	warn "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_clone_nocheckout failed\n"
-		if run_sync_redir qw! git clone --no-checkout !, $remotePath, $localPath;
+		if run_sync_redir qw! git clone --no-checkout !,$remotePath,$localPath;
 }
 
-sub repo_config {
+sub repo_config
+{
 	return unless $config->{MODE_CONFIGURE} and $config->{CONFIG_CMD};
 
-    my ($localPath, $mediaPath) = @_;
+	my ($localPath,$mediaPath) = @_;
 
 	$mediaPath = '' unless defined $mediaPath;
 
@@ -316,18 +348,20 @@ sub repo_config {
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_config failed\n"
-		if indir $localPath, sub {return run_sync_redir $config->{CONFIG_CMD}, $mediaPath;};
+		if indir $localPath,sub {return run_sync_redir $config->{CONFIG_CMD},$mediaPath;};
 }
 
-sub repo_cmd {
+sub repo_cmd
+{
 	return unless $config->{MODE_GIT};
 
 	my ($localPath) = @_;
 
-	indir $localPath, sub {return run_sync_redir 'git', @ARGV;};
+	indir $localPath,sub {return run_sync_redir 'git',@ARGV;};
 }
 
-sub repo_check_out {
+sub repo_check_out
+{
 	return unless $config->{MODE_CLONE}; # Checkout is the last phase of cloning
 
 	my ($localPath) = @_;
@@ -336,41 +370,44 @@ sub repo_check_out {
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_check_out failed\n"
-		if indir $localPath, sub {return run_sync_redir qw! git reset --hard !;}
+		if indir $localPath,sub {return run_sync_redir qw! git reset --hard !;}
 }
 
-sub remote_fallback_inv {
+sub remote_fallback_inv
+{
 	no warnings;
 
 	my ($remoteURL) = @_;
 
-	my $pid = open3 undef, '>&STDERR', *DEVNULL, qw! git remote set-url origin !, $remoteURL;
+	my $pid = open3 undef,'>&STDERR',*DEVNULL,qw! git remote set-url origin !,$remoteURL;
 	die "$myName: failed to spawn git\n"
 		unless $pid;
 
 	die "$myName: waitpid failed\n"
-		if $pid != waitpid($pid, 0);
+		if $pid != waitpid($pid,0);
 
 	return $?
 		unless 512 == $?; # Apparently this should be 3 but the git-remote docs are made of lies
 
-	return run_sync_redir qw! git remote add -f origin     !, $remoteURL;
+	return run_sync_redir qw! git remote add -f origin     !,$remoteURL;
 }
 
-sub repo_set_remote {
+sub repo_set_remote
+{
 	return unless $config->{MODE_SET_REMOTE};
 
-	my ($localPath, $remotePath) = @_;
+	my ($localPath,$remotePath) = @_;
 
 	warn "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_set_remote failed\n"
-		if indir $localPath, sub {return remote_fallback_inv($remotePath);};
+		if indir $localPath,sub {return remote_fallback_inv($remotePath);};
 }
 
 # Spawn a child process and pipe config to it instead of letting it look for a conffile
-sub recurse {
+sub recurse
+{
 	return unless $config->{OPT_RECURSE};
 
 	my ($kidPath) = @_;
@@ -382,34 +419,37 @@ sub recurse {
 	# Start the child process, stream an artificial config file to it, and close its STDIN handle; since we just copied 
 	# the hash, we shouldn't need to reset its internal iterator
 	my $sic;
-	my $pid = indir $kidPath, sub {return open3($sic, '>&STDOUT', '>&STDERR', $myPath, $childConfig->{MODE}, @ARGV );};
+	my $pid = indir $kidPath,sub {return open3($sic,'>&STDOUT','>&STDERR',$myPath,$childConfig->{MODE},@ARGV);};
 	die "$myName: failed to spawn recursive instance\n"
 		unless $pid and fileno($sic);
-	config_print $sic, $childConfig;
+	config_print $sic,$childConfig;
 	close $sic;
 
 	# Wait for the child to finish and get its exit code
 	die "$myName: recursive instance failed\n"
-		if $pid != waitpid($pid, 0)  or  $?;
+		if $pid != waitpid($pid,0)  or  $?;
 }
 
 # Recurse a tree looking for listfiles and delegating them to child processes
-sub recurse_listfiles {
+sub recurse_listfiles
+{
 	my ($dir) = @_;
 	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
 
-	die "$myName: recursion to '${\cat_path($config->{RECURSE_PREFIX}, $dir)}' failed\n"
-		unless opendir(my $handle, $dir);
+	die "$myName: recursion to '${\cat_path($config->{RECURSE_PREFIX},$dir)}' failed\n"
+		unless opendir(my $handle,$dir);
 
 	my @kids = readdir($handle);
 
-	foreach my $kid (@kids) {
-		my $kidPath = cat_path($dir, $kid);
+	foreach my $kid (@kids)
+	{
+		my $kidPath = cat_path($dir,$kid);
 		next unless -d $kidPath;
 
 		next if $kid =~ /^\./;
 
-		if (-e "$kidPath/$config->{LIST_FN}") { # Subdirs containing listfiles need recursive invocation
+		if (-e "$kidPath/$config->{LIST_FN}") # Subdirs containing listfiles need recursive invocation
+		{
 			&recurse($kidPath);
 			next; # Recursion will have found any deeper listfiles, so bail on this dir
 		}
