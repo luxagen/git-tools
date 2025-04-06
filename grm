@@ -104,12 +104,8 @@ sub cat_path {
 	my $result = undef;
 	for my $piece (reverse @pieces) {
 		$piece =~ s/^\.\///;
-		if (not defined $result) {
-			$result=$piece;
-		}
-		else {
-			$result = "$piece/$result";
-		}
+
+		$result  =  defined $result ? "$piece/$result" : $piece;
 
 		return $result if $piece =~ /^\//;
 	}
