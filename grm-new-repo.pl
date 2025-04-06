@@ -7,7 +7,7 @@ use IPC::Run qw(run);
 # Helper function to run git commands
 sub run_git {
     my ($capture_output, @args) = @_;
-    
+
     if ($capture_output) {
         my $out = '';
         my $err = '';
