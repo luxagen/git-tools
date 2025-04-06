@@ -27,16 +27,38 @@ use constant MODE_LIST => qw(
 
 use constant MODE_LIST_LS => join("\n",MODE_LIST);
 
-our $config=
-{
-	OPT_DEBUG_PRIMITIVES => 0,
-};
+# Store a clean copy of the original environment
+our %clean_env = %ENV;
+# Remove any GRM_ variables from the clean environment
+foreach my $key (keys %clean_env) {
+    delete $clean_env{$key} if $key =~ /^GRM_/;
+}
 
-if (-t STDIN) # STDIN is a TTY, so get configuration from the 'nearest' conffile
+our $config = {};
+
+if (-t STDIN) # Not a recursive child process - set defaults
 {
+	$config->{OPT_DEBUG_PRIMITIVES} = 0;
 	$config->{OPT_RECURSE   } =  1;
 	$config->{RECURSE_PREFIX} = '';
+}
 
+# Overlay environment variables
+foreach my $envKey (keys %ENV) {
+	if ($envKey =~ /^GRM_(.+)$/) {
+		my $configKey = $1;
+
+		if ($configKey =~ /^OPT_/) {
+			# Convert boolean options - anything non-empty besides '' is true
+			$config->{$configKey} = ($ENV{$envKey} ne '') ? 1 : 0;
+		} else {
+			$config->{$configKey} = $ENV{$envKey};
+		}
+	}
+}
+
+if (-t STDIN) # Not a recursive child process - get configuration from the 'nearest' conffile
+{
 	# Special case: antirecurse to find the conffile and process it
 	my $pathConf = &find_conffile();
 	open(my $handle,'<:encoding(UTF-8)',$pathConf) or die "$myName: cannot open '$pathConf'\n";
@@ -414,7 +436,7 @@ sub repo_set_remote
 		if indir $localPath,sub {return remote_fallback_inv($remotePath);};
 }
 
-# Spawn a child process and pipe config to it instead of letting it look for a conffile
+# Spawn a child process and pass config via environment variables
 sub recurse
 {
 	return unless $config->{OPT_RECURSE};
@@ -425,18 +447,39 @@ sub recurse
 	my $childConfig = &config_clone;
 	$childConfig->{RECURSE_PREFIX} = "$config->{RECURSE_PREFIX}$kidPathRel/";
 
-	# Start the child process, stream an artificial config file to it, and close its STDIN handle; since we just copied 
-	# the hash, we shouldn't need to reset its internal iterator
-	my $sic;
-	my $pid = indir $kidPath,sub {return open3($sic,'>&STDOUT','>&STDERR',$myPath,$mode,@ARGV);};
-	die "$myName: failed to spawn recursive instance\n"
-		unless $pid and fileno($sic);
-	config_print $sic,$childConfig;
-	close $sic;
+	# Set up environment variables for the child process
+	my %childEnv = %clean_env;  # Start with the clean environment
+	
+	# Add all config items as environment variables with GRM_ prefix
+	foreach my $key (keys %$childConfig) {
+		if (defined $childConfig->{$key}) {
+			if ($key =~ /^OPT_/) {
+				# Boolean options: empty string for false, 'true' for true
+				$childEnv{"GRM_$key"} = $childConfig->{$key} ? 'true' : '';
+			}
+			else {
+				# All other values passed normally (including MODE_* which will be overridden by mode_set)
+				$childEnv{"GRM_$key"} = $childConfig->{$key};
+			}
+		}
+	}
 
-	# Wait for the child to finish and get its exit code
+	# Spawn the child process with the modified environment
+	my $exitStatus;
+	{
+		local %ENV = %childEnv;  # Temporarily modify environment
+		
+		# Use system() instead of open3 since we don't need STDIN interaction
+		indir $kidPath,sub {
+			system($myPath, $mode, @ARGV);
+			$exitStatus = $?;  # Preserve the full status including signal information
+			return 0;
+		};
+	}
+
+	# Check if child was terminated by a signal (low 8 bits) or had a non-zero exit (high 8 bits)
 	die "$myName: recursive instance failed\n"
-		if $pid != waitpid($pid,0)  or  $?;
+		if $exitStatus;
 }
 
 # Recurse a tree looking for listfiles and delegating them to child processes
