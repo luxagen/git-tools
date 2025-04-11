@@ -22,7 +22,7 @@ foreach my $envKey (keys %ENV) {
 }
 
 # Check required environment variables
-my @required_vars = qw(CFGCMD RPATH_TEMPLATE RLOGIN RPATH_BASE);
+my @required_vars = qw(CONFIG_CMD RPATH_TEMPLATE RLOGIN RPATH_BASE);
 my @missing;
 
 foreach my $var (@required_vars) {
@@ -85,7 +85,7 @@ die "$myName: git init failed"
 
 # Configure the repository
 die "$myName: config command failed"
-	if run_sync_redir $config->{CFGCMD};
+	if run_sync_redir $config->{CONFIG_CMD};
 
 my $SSH_RPATH = "ssh://$config->{RLOGIN}$GRM_RPATH";
 
