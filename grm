@@ -14,19 +14,6 @@ our $SEPARATOR = '*';
 our $mode; # Taken from the command line
 use constant CONFIG_FILENAME => '.grm.conf';
 
-use constant MODE_LIST => qw(
-	clone
-	git
-	set-remote
-	configure
-	list-rrel
-	list-rurl
-	list-lrel
-	run
-);
-
-use constant MODE_LIST_LS => join("\n",MODE_LIST);
-
 # Store a clean copy of the original environment
 our %clean_env = %ENV;
 # Remove any GRM_ variables from the clean environment
@@ -276,7 +263,21 @@ sub mode_set
 	my ($cmd_mode) = @_;
 
 	die "$myName: missing mode\n" if not defined($cmd_mode) or $cmd_mode eq '';
-	die "$myName: no such mode '$cmd_mode'; must be one of:\n${\MODE_LIST_LS}\n" unless grep(/^$cmd_mode$/,MODE_LIST);
+
+	use constant MODE_LIST => qw(
+		clone
+		git
+		set-remote
+		configure
+		list-rrel
+		list-rurl
+		list-lrel
+		run
+	);
+
+	use constant MODE_LIST_STR => join("\n",MODE_LIST);
+
+	die "$myName: no such mode '$cmd_mode'; must be one of:\n${\MODE_LIST_STR}\n" unless grep(/^$cmd_mode$/,MODE_LIST);
 
 	$mode = $cmd_mode;
 
