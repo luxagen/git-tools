@@ -12,7 +12,6 @@ our $myName = basename($myPath);
 
 our $SEPARATOR = '*';
 our $mode; # Taken from the command line
-use constant CONFIG_FILENAME => '.grm.conf';
 
 # Store a clean copy of the original environment
 our %clean_env = %ENV;
@@ -25,6 +24,7 @@ our $config = {};
 
 if (-t STDIN) # Not a recursive child process - set defaults
 {
+	$config->{CONFIG_FILENAME} = '.grm.conf';
 	$config->{OPT_DEBUG_PRIMITIVES} = 0;
 	$config->{OPT_RECURSE   } =  1;
 	$config->{RECURSE_PREFIX} = '';
@@ -199,15 +199,15 @@ sub find_conffile
 
 	my $orig = cwd;
 
-	until (-e CONFIG_FILENAME)
+	until (-e $config->{CONFIG_FILENAME})
 	{
 		my $prev = cwd;
 
-		say STDERR "$myName: no '${\CONFIG_FILENAME}' file found in current directory or any ancestor"
+		say STDERR "$myName: no '$config->{CONFIG_FILENAME}' file found in current directory or any ancestor"
 			unless chdir('..') and cwd ne $prev;
 	}
 
-	my $result = "${\cwd}/${\CONFIG_FILENAME}";
+	my $result = "${\cwd}/$config->{CONFIG_FILENAME}";
 	chdir($orig);
 	return $result;
 }
