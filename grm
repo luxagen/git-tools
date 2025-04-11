@@ -11,7 +11,7 @@ our $myPath = $0;
 our $myName = basename($myPath);
 
 our $SEPARATOR = '*';
-our $fnConf = '.grm.conf';
+use constant CONFIG_FILENAME => '.grm.conf';
 
 use constant MODE_LIST => qw(
 	clone
@@ -180,15 +180,15 @@ sub find_conffile
 
 	my $orig = cwd;
 
-	until (-e $fnConf)
+	until (-e CONFIG_FILENAME)
 	{
 		my $prev = cwd;
 
-		die "$myName: no '$fnConf' file found in current directory or any ancestor\n"
+		die "$myName: no '${\CONFIG_FILENAME}' file found in current directory or any ancestor\n"
 			unless chdir('..') and cwd ne $prev;
 	}
 
-	my $result = cwd."/$fnConf";
+	my $result = cwd."/${\CONFIG_FILENAME}";
 	chdir($orig);
 	return $result;
 }
