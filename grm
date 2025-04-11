@@ -11,6 +11,7 @@ our $myPath = $0;
 our $myName = basename($myPath);
 
 our $SEPARATOR = '*';
+our $mode; # Taken from the command line
 use constant CONFIG_FILENAME => '.grm.conf';
 
 use constant MODE_LIST => qw(
@@ -140,9 +141,17 @@ sub config_clean
 {
 	my ($hr) = @_;
 
+	# Clear these to avoid pollution between parent and child processes
 	delete $hr->{REMOTE_DIR};
 	delete $hr->{LOCAL_DIR };
 	delete $hr->{GM_DIR    };
+	delete $hr->{MODE_CLONE     };
+	delete $hr->{MODE_GIT       };
+	delete $hr->{MODE_SET_REMOTE};
+	delete $hr->{MODE_CONFIGURE };
+	delete $hr->{MODE_LIST_RREL };
+	delete $hr->{MODE_LIST_RURL };
+	delete $hr->{MODE_LIST_LREL };
 
 	return $hr;
 }
@@ -242,12 +251,12 @@ sub is_dir_repo_root
 
 sub mode_set
 {
-	my ($mode) = @_;
+	my ($cmd_mode) = @_;
 
-	die "$myName: missing mode\n" if not defined($mode) or $mode eq '';
-	die "$myName: no such mode '$mode'; must be one of:\n${\MODE_LIST_LS}\n" unless grep(/^$mode$/,MODE_LIST);
+	die "$myName: missing mode\n" if not defined($cmd_mode) or $cmd_mode eq '';
+	die "$myName: no such mode '$cmd_mode'; must be one of:\n${\MODE_LIST_LS}\n" unless grep(/^$cmd_mode$/,MODE_LIST);
 
-	$config->{MODE} = $mode;
+	$mode = $cmd_mode;
 
 	if ($mode eq 'git')
 	{
@@ -286,9 +295,9 @@ sub repo_process
 	$mediaPath = cat_path($config->{GM_BASE_PATH},$mediaPath);
 
 	# These return in order to maximise speed
-	return print "$remotePath\n"            if $config->{MODE_LIST_RREL};
-	return print "$remoteURL\n"             if $config->{MODE_LIST_RURL};
-	return print "$config->{RECURSE_PREFIX}$localPath\n" if $config->{MODE_LIST_LREL};
+	return print "$remotePath\n"            if $mode eq 'list-rrel';
+	return print "$remoteURL\n"             if $mode eq 'list-rurl';
+	return print "$config->{RECURSE_PREFIX}$localPath\n" if $mode eq 'list-lrel';
 
 	warn "  repo_process: '$config->{RECURSE_PREFIX}$localPath'\n"
 		if $config->{OPT_DEBUG_PRIMITIVES};
@@ -419,7 +428,7 @@ sub recurse
 	# Start the child process, stream an artificial config file to it, and close its STDIN handle; since we just copied 
 	# the hash, we shouldn't need to reset its internal iterator
 	my $sic;
-	my $pid = indir $kidPath,sub {return open3($sic,'>&STDOUT','>&STDERR',$myPath,$childConfig->{MODE},@ARGV);};
+	my $pid = indir $kidPath,sub {return open3($sic,'>&STDOUT','>&STDERR',$myPath,$mode,@ARGV);};
 	die "$myName: failed to spawn recursive instance\n"
 		unless $pid and fileno($sic);
 	config_print $sic,$childConfig;
