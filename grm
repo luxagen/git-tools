@@ -4,6 +4,8 @@ use warnings;
 use File::Basename qw(basename);
 use Cwd qw(cwd getcwd);
 use IPC::Open3 qw(open3);
+require Getopt::Long;
+Getopt::Long::Configure('bundling', 'no_ignore_case');
 
 sub run_sync_redir;
 
@@ -51,7 +53,21 @@ $config = &config_clean($config); # Protect ourselves from conffile overreach
 die "$myName: configuration is missing LIST_FN"
 	unless defined($config->{LIST_FN});
 
-# Process the one and only possible command-line arg
+# Process command-line arguments using Getopt::Long
+my %opts;
+my $help = 0;
+Getopt::Long::GetOptions(
+    'help|h' => \$help,
+    'debug|d' => sub { $config->{OPT_DEBUG_PRIMITIVES} = 1 },
+);
+
+# Show help if requested
+if ($help) {
+    &print_usage();
+    exit 0;
+}
+
+# Process the command (first non-option argument)
 &mode_set(shift @ARGV);
 
 our $treeFilter = cwd; # Save current directory so we can use it later
@@ -274,7 +290,7 @@ sub mode_set
 		return;
 	}
 
-	die "$myName: too many arguments\n" unless scalar @ARGV <= 0;
+	die "$myName: too many arguments\n" unless scalar @ARGV <= 0 || $mode eq 'git';
 
 	if ($mode eq 'run')
 	{
@@ -493,4 +509,20 @@ sub recurse_listfiles
 	}
 
 	closedir($handle);
+}
+
+sub print_usage {
+    print "Usage: $myName [options] <mode> [git-args...]\n";
+    print "Options:\n";
+    print "  -h, --help    Show this help message\n";
+    print "  -d, --debug   Enable debug output\n";
+    print "Modes:\n";
+    print "  clone         Clone repositories\n";
+    print "  git           Run git command on repositories\n";
+    print "  set-remote    Set remote URL for repositories\n";
+    print "  configure     Configure repositories\n";
+    print "  list-rrel     List remote relative paths\n";
+    print "  list-rurl     List remote URLs\n";
+    print "  list-lrel     List local relative paths\n";
+    print "  run           Run clone and set-remote\n";
 }
