@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 use strict;
-use warnings;
+use feature 'say';
 use File::Basename qw(basename);
 use Cwd qw(cwd getcwd);
 use IPC::Open3 qw(open3);
@@ -48,7 +48,8 @@ if (-t STDIN) # Not a recursive child process - get configuration from the 'near
 {
 	# Special case: antirecurse to find the conffile and process it
 	my $pathConf = &find_conffile();
-	open(my $handle,'<:encoding(UTF-8)',$pathConf) or die "$myName: cannot open '$pathConf'\n";
+	die "$myName: cannot open '$pathConf'"
+		unless open(my $handle,'<:encoding(UTF-8)',$pathConf);
 	&listfile_process($handle,$pathConf);
 	close($handle);
 }
@@ -85,8 +86,8 @@ sub listfile_process
 
 	my $quotedPath  =  $listFile ? "'$config->{RECURSE_PREFIX}$listFile'" : '<HANDLE>';
 
-	warn "$myName: processing $quotedPath\n" if
-		$config->{OPT_DEBUG_PRIMITIVES};
+	say STDERR "$myName: processing $quotedPath"
+		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	while (<$handle>)
 	{
@@ -193,7 +194,7 @@ sub config_print
 
 sub find_conffile
 {
-	printf STDERR "  chdir_find_listfile: starting at '%s'\n",cwd
+	say STDERR "  chdir_find_listfile: starting at '$config->{RECURSE_PREFIX}${\cwd}'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	my $orig = cwd;
@@ -202,11 +203,11 @@ sub find_conffile
 	{
 		my $prev = cwd;
 
-		die "$myName: no '${\CONFIG_FILENAME}' file found in current directory or any ancestor\n"
+		say STDERR "$myName: no '${\CONFIG_FILENAME}' file found in current directory or any ancestor"
 			unless chdir('..') and cwd ne $prev;
 	}
 
-	my $result = cwd."/${\CONFIG_FILENAME}";
+	my $result = "${\cwd}/${\CONFIG_FILENAME}";
 	chdir($orig);
 	return $result;
 }
@@ -217,7 +218,7 @@ sub chdir_listfile
 	{
 		my $prev = cwd;
 		
-		die "$myName: no '$config->{LIST_FN}' file found in current directory or any ancestor\n"
+		die "$myName: no '$config->{LIST_FN}' file found in current directory or any ancestor"
 			unless chdir('..') and cwd ne $prev;
 	}
 }
@@ -229,7 +230,8 @@ sub run_sync_redir(@)
 		$pid = open3(undef, '>&STDERR', '>&STDERR', @_);
 	};
 	
-	die "$myName: failed to run {@_}\n" unless $pid;
+	die "$myName: failed to run {@_}"
+		unless $pid;
 	
 	waitpid($pid, 0);
 	return $?;
@@ -253,7 +255,7 @@ sub is_dir_repo_root
 
 	my $prefix = indir $localPath,sub {return qx! git rev-parse --show-prefix !};
 
-	die "$myName: is_dir_repo_root failed\n"
+	die "$myName: is_dir_repo_root failed"
 		if $?;
 
 	chomp $prefix;
@@ -264,7 +266,8 @@ sub mode_set
 {
 	my ($cmd_mode) = @_;
 
-	die "$myName: missing mode\n" if not defined($cmd_mode) or $cmd_mode eq '';
+	die "$myName: missing mode"
+		unless defined($cmd_mode) and $cmd_mode ne '';
 
 	use constant MODE_LIST => qw(
 		clone
@@ -279,7 +282,8 @@ sub mode_set
 
 	use constant MODE_LIST_STR => join("\n",MODE_LIST);
 
-	die "$myName: no such mode '$cmd_mode'; must be one of:\n${\MODE_LIST_STR}\n" unless grep(/^$cmd_mode$/,MODE_LIST);
+	die "$myName: no such mode '$cmd_mode'; must be one of:\n${\MODE_LIST_STR}"
+		unless grep(/^$cmd_mode$/,MODE_LIST);
 
 	$mode = $cmd_mode;
 
@@ -292,7 +296,7 @@ sub mode_set
 		return;
 	}
 
-	die "$myName: too many arguments\n" unless scalar @ARGV <= 0;
+	die "$myName: too many arguments" unless scalar @ARGV <= 0;
 
 	if ($mode eq 'run')
 	{
@@ -320,11 +324,11 @@ sub repo_process
 	$mediaPath = cat_path($config->{GM_BASE_PATH},$mediaPath);
 
 	# These return in order to maximise speed
-	return print "$remotePath\n"            if $mode eq 'list-rrel';
-	return print "$remoteURL\n"             if $mode eq 'list-rurl';
-	return print "$config->{RECURSE_PREFIX}$localPath\n" if $mode eq 'list-lrel';
+	return say $remotePath                           if $mode eq 'list-rrel';
+	return say $remoteURL                            if $mode eq 'list-rurl';
+	return say "$config->{RECURSE_PREFIX}$localPath" if $mode eq 'list-lrel';
 
-	warn "  repo_process: '$config->{RECURSE_PREFIX}$localPath'\n"
+	say STDERR "  repo_process: '$config->{RECURSE_PREFIX}$localPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	unless (-e $localPath)
@@ -339,19 +343,19 @@ sub repo_process
 	unless (-d $localPath)
 	{
 		# Flag non-dirs that block repos
-		warn "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory\n";
+		say STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory";
 		return;
 	}
 
 	# Don't touch non-repo dirs with a bargepole
 	unless (&is_dir_repo_root($localPath))
 	{
-		warn "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository\n";
+		say STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository";
 		return;
 	}
 
 	# For existing repos, don't clone but do update remote & configure
-	warn "'$config->{RECURSE_PREFIX}$localPath' exists\n";
+	say STDERR "'$config->{RECURSE_PREFIX}$localPath' exists";
 	&repo_set_remote($localPath,$remoteURL);
 	&repo_config($localPath,$mediaPath);
 	&repo_cmd($localPath);
@@ -363,10 +367,10 @@ sub repo_clone_nocheckout
 
 	my ($localPath,$remotePath) = @_;
 
-	warn "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'\n"
+	say STDERR "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	die "$myName: repo_clone_nocheckout failed\n"
+	die "$myName: repo_clone_nocheckout failed"
 		if run_sync_redir qw! git clone --no-checkout !,$remotePath,$localPath;
 }
 
@@ -378,10 +382,10 @@ sub repo_config
 
 	$mediaPath = '' unless defined $mediaPath;
 
-	warn "  repo_config: '$config->{RECURSE_PREFIX}$localPath' with '$mediaPath'\n"
+	say STDERR "  repo_config: '$config->{RECURSE_PREFIX}$localPath' with '$mediaPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	die "$myName: repo_config failed\n"
+	die "$myName: repo_config failed"
 		if indir $localPath,sub {return run_sync_redir $config->{CONFIG_CMD},$mediaPath;};
 }
 
@@ -400,10 +404,10 @@ sub repo_check_out
 
 	my ($localPath) = @_;
 
-	warn "  repo_check_out: '$config->{RECURSE_PREFIX}$localPath'\n"
+	say STDERR "  repo_check_out: '$config->{RECURSE_PREFIX}$localPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	die "$myName: repo_check_out failed\n"
+	die "$myName: repo_check_out failed"
 		if indir $localPath,sub {return run_sync_redir qw! git reset --hard !;}
 }
 
@@ -418,7 +422,8 @@ sub remote_fallback_inv
 		$pid = open3(undef, '>&STDERR', '>&STDERR', 'git', 'remote', 'set-url', 'origin', $remoteURL);
 	};
 	
-	die "$myName: failed to spawn git\n" unless $pid;
+	die "$myName: failed to spawn git"
+		unless $pid;
 	
 	waitpid($pid, 0);
 
@@ -434,10 +439,10 @@ sub repo_set_remote
 
 	my ($localPath,$remotePath) = @_;
 
-	warn "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'\n"
+	say STDERR "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
-	die "$myName: repo_set_remote failed\n"
+	die "$myName: repo_set_remote failed"
 		if indir $localPath,sub {return remote_fallback_inv($remotePath);};
 }
 
@@ -483,7 +488,7 @@ sub recurse
 	}
 
 	# Check if child was terminated by a signal (low 8 bits) or had a non-zero exit (high 8 bits)
-	die "$myName: recursive instance failed\n"
+	die "$myName: recursive instance failed"
 		if $exitStatus;
 }
 
@@ -493,7 +498,7 @@ sub recurse_listfiles
 	my ($dir) = @_;
 	$dir =~ s/\/$//; # Remove any trailing slash before concatenating
 
-	die "$myName: recursion to '${\cat_path($config->{RECURSE_PREFIX},$dir)}' failed\n"
+	die "$myName: recursion to '${\cat_path($config->{RECURSE_PREFIX},$dir)}' failed"
 		unless opendir(my $handle,$dir);
 
 	my @kids = readdir($handle);
