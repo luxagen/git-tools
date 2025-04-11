@@ -316,6 +316,12 @@ sub mode_set
 	$config->{MODE_CONFIGURE} ||= $config->{MODE_CLONE}; # Cloning requires configuration as phase 2/3, before checkout
 }
 
+# Helper function for consistent path formatting
+sub format_output_path {
+	my ($base, $rel) = @_;
+	return "${\$base//''}/$rel" =~ s!(^/+|/+$)!!gr;
+}
+
 sub repo_process
 {
 	my ($localPath,$remotePath,$mediaPath) = @_;
@@ -324,9 +330,9 @@ sub repo_process
 	$mediaPath = cat_path($config->{GM_BASE_PATH},$mediaPath);
 
 	# These return in order to maximise speed
-	return say $remotePath                           if $mode eq 'list-rrel';
-	return say $remoteURL                            if $mode eq 'list-rurl';
-	return say "$config->{RECURSE_PREFIX}$localPath" if $mode eq 'list-lrel';
+	return say &format_output_path($config->{RECURSE_PREFIX},$remotePath) if $mode eq 'list-rrel';
+	return say &format_output_path(undef,                    $remoteURL ) if $mode eq 'list-rurl';
+	return say &format_output_path($config->{RECURSE_PREFIX},$localPath ) if $mode eq 'list-lrel';
 
 	say STDERR "  repo_process: '$config->{RECURSE_PREFIX}$localPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
@@ -343,19 +349,19 @@ sub repo_process
 	unless (-d $localPath)
 	{
 		# Flag non-dirs that block repos
-		say STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a directory";
+		say STDERR "ERROR: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)} is not a directory";
 		return;
 	}
 
 	# Don't touch non-repo dirs with a bargepole
 	unless (&is_dir_repo_root($localPath))
 	{
-		say STDERR "ERROR: '$config->{RECURSE_PREFIX}$localPath' is not a Git repository";
+		say STDERR "ERROR: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)} is not a Git repository";
 		return;
 	}
 
 	# For existing repos, don't clone but do update remote & configure
-	say STDERR "'$config->{RECURSE_PREFIX}$localPath' exists";
+	say STDERR "${\&format_output_path($config->{RECURSE_PREFIX},$localPath)} exists";
 	&repo_set_remote($localPath,$remoteURL);
 	&repo_config($localPath,$mediaPath);
 	&repo_cmd($localPath);
@@ -367,7 +373,7 @@ sub repo_clone_nocheckout
 
 	my ($localPath,$remotePath) = @_;
 
-	say STDERR "  repo_clone_nocheckout: '$config->{RECURSE_PREFIX}$localPath'"
+	say STDERR "  repo_clone_nocheckout: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)}"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_clone_nocheckout failed"
@@ -382,7 +388,7 @@ sub repo_config
 
 	$mediaPath = '' unless defined $mediaPath;
 
-	say STDERR "  repo_config: '$config->{RECURSE_PREFIX}$localPath' with '$mediaPath'"
+	say STDERR "  repo_config: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)} with '$mediaPath'"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_config failed"
@@ -404,7 +410,7 @@ sub repo_check_out
 
 	my ($localPath) = @_;
 
-	say STDERR "  repo_check_out: '$config->{RECURSE_PREFIX}$localPath'"
+	say STDERR "  repo_check_out: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)}"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_check_out failed"
@@ -439,7 +445,7 @@ sub repo_set_remote
 
 	my ($localPath,$remotePath) = @_;
 
-	say STDERR "  repo_set_remote: '$config->{RECURSE_PREFIX}$localPath'"
+	say STDERR "  repo_set_remote: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)}"
 		if $config->{OPT_DEBUG_PRIMITIVES};
 
 	die "$myName: repo_set_remote failed"
@@ -455,7 +461,7 @@ sub recurse
 	my $kidPathRel  =  $kidPath =~ s/^$treeFilter\///r;
 
 	my $childConfig = &config_clone;
-	$childConfig->{RECURSE_PREFIX} = "$config->{RECURSE_PREFIX}$kidPathRel/";
+	$childConfig->{RECURSE_PREFIX} = &format_output_path($config->{RECURSE_PREFIX},"$kidPathRel/");
 
 	# Set up environment variables for the child process
 	my %childEnv = %clean_env;  # Start with the clean environment
