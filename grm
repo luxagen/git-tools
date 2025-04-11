@@ -326,7 +326,17 @@ sub repo_process
 {
 	my ($localPath,$remotePath,$mediaPath) = @_;
 
-	my $remoteURL  =  (length $config->{REMOTE_BASE_URL}) ? "$config->{REMOTE_BASE_URL}/$remotePath" : $remotePath;
+	my $remoteURL;
+	if (length $config->{RLOGIN}) {
+		# Using the new RLOGIN and RPATH_BASE pattern
+		$remoteURL = "ssh://$config->{RLOGIN}$config->{RPATH_BASE}/$remotePath";
+	} elsif (length $config->{REMOTE_BASE_URL}) {
+		# Backward compatibility with REMOTE_BASE_URL
+		$remoteURL = "$config->{REMOTE_BASE_URL}/$remotePath";
+	} else {
+		# Fallback for no remote configuration
+		$remoteURL = $remotePath;
+	}
 	$mediaPath = cat_path($config->{GM_BASE_PATH},$mediaPath);
 
 	# These return in order to maximise speed
