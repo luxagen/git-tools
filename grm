@@ -207,11 +207,13 @@ sub chdir_listfile
 sub run_sync_redir(@)
 {
 	my $pid;
-
-	die "$myName: failed to run {@_}\n"
-		unless $pid = open3(undef,'>&STDERR','>&STDERR',@_)
-		and $pid == waitpid $pid,0;
-
+	eval {
+		$pid = open3(undef, '>&STDERR', '>&STDERR', @_);
+	};
+	
+	die "$myName: failed to run {@_}\n" unless $pid;
+	
+	waitpid($pid, 0);
 	return $?;
 }
 
@@ -393,12 +395,14 @@ sub remote_fallback_inv
 
 	my ($remoteURL) = @_;
 
-	my $pid = open3 undef,'>&STDERR',*DEVNULL,qw! git remote set-url origin !,$remoteURL;
-	die "$myName: failed to spawn git\n"
-		unless $pid;
-
-	die "$myName: waitpid failed\n"
-		if $pid != waitpid($pid,0);
+	my $pid;
+	eval {
+		$pid = open3(undef, '>&STDERR', '>&STDERR', 'git', 'remote', 'set-url', 'origin', $remoteURL);
+	};
+	
+	die "$myName: failed to spawn git\n" unless $pid;
+	
+	waitpid($pid, 0);
 
 	return $?
 		unless 512 == $?; # Apparently this should be 3 but the git-remote docs are made of lies
@@ -443,9 +447,16 @@ sub recurse
 	{
 		local %ENV = %childEnv;  # Temporarily modify environment
 		
-		# Use system() instead of open3 since we don't need STDIN interaction
+		# Use open3 instead of run3
 		$exitcode = indir $kidPath,sub {
-			system($myPath, $mode, @ARGV);
+			my $pid;
+			eval {
+				$pid = open3(undef, '>&STDOUT', '>&STDERR', $myPath, $mode, @ARGV);
+			};
+			
+			return 1 unless $pid; # Return error if process creation failed
+			
+			waitpid($pid, 0);
 			return $? >> 8;  # Extract the exit code
 		};
 	}
