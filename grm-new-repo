@@ -1,60 +1,142 @@
-#!/bin/bash
+#!/usr/bin/perl
+use strict;
+use feature 'say';
+use File::Basename qw(basename);
+use Cwd qw(cwd getcwd);
+use IPC::Open3 qw(open3);
+
+sub run_sync_redir;
+sub indir;
+
+our $myPath = $0;
+our $myName = basename($myPath);
+
+our $config = {};
+
+# Overlay environment variables
+foreach my $envKey (keys %ENV) {
+	if ($envKey =~ /^GRM_(.+)$/) {
+		my $configKey = $1;
+		$config->{$configKey} = $ENV{$envKey};
+	}
+}
 
 # Check required environment variables
-missing=""
-for var in GRM_CFGCMD GRM_RPATH_TEMPLATE GRM_RLOGIN; do
-	[[ ! -v $var ]] && missing+="$var "
-done
+my @required_vars = qw(CFGCMD RPATH_TEMPLATE RLOGIN RPATH_BASE);
+my @missing;
 
-if [[ -n "$missing" ]]; then
-	echo "The following environment variables must be set: $missing"
-	exit 2
-fi
+foreach my $var (@required_vars) {
+	push @missing, "GRM_$var" unless defined $config->{$var};
+}
 
-[[ -d .git ]]; VIRGIN="$?" # Determine whether this dir is already a git repo
+if (@missing) {
+	say "Creation of new remotes requires the following configuration items to be set: ".join(' ', @missing);
+	exit 2;
+}
 
-# Set path base
-GRM_RPATH_BASE=''
+# Determine whether this dir is already a git repo
+my $VIRGIN = !(-d '.git');
 
-LREL=`grm list-lrel`
-RREL=`grm list-rrel`
-GRM_RPATH="$GRM_RPATH_BASE/$RREL"
-[[ $GRM_RPATH == *.git ]] || GRM_RPATH+=".git"
+# Run grm commands to get path information
+my $LREL = `grm list-lrel`;
+chomp $LREL;
+my $RREL = `grm list-rrel`;
+chomp $RREL;
+
+my $GRM_RPATH = "$config->{RPATH_BASE}/$RREL";
+$GRM_RPATH .= '.git' unless $GRM_RPATH =~ /\.git$/;
 
 # There must be exactly one GRM-known (sub)directory and it must be .
-if [[ -z "$RREL" ]] || [[ ! "$PWD" =~ "$LREL"$ ]]; then
-	echo 'The current directory is unknown to GRM!'
-	exit 1
-fi
+if ($RREL eq '' || getcwd() !~ /$LREL$/) {
+	say 'The current directory is unknown to GRM!';
+	exit 1;
+}
 
-read -p "About to create remote repo '$GRM_RPATH'; are you sure? " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]
-then
-	echo "(aborted)"
-	exit 0
-fi
+# Prompt for confirmation
+print "About to create remote repo '$GRM_RPATH'; are you sure? ";
+my $reply = <STDIN>;
+chomp $reply;
 
-git init -q
-$GRM_CFGCMD
-
-set -e
+if ($reply !~ /^[Yy]$/) {
+	say "(aborted)";
+	exit 0;
+}
 
 # Create new remote repo based on remote template
-echo -ne "$GRM_RPATH\0" | ssh "$GRM_RLOGIN" "xargs -0 -n 1 -- cp -na --reflink=auto '$GRM_RPATH_BASE/$GRM_RPATH_TEMPLATE'";
+my $ssh_cmd = "xargs -0 -n 1 -- cp -na --reflink=auto '$config->{RPATH_BASE}/$config->{RPATH_TEMPLATE}'";
+my $pid_ssh;
 
-SSH_RPATH="ssh://$GRM_RLOGIN$GRM_RPATH"
+eval {
+	$pid_ssh = open3(my $ssh_in, '>&STDERR', '>&STDERR', 'ssh', $config->{RLOGIN}, $ssh_cmd);
+	print $ssh_in "$GRM_RPATH\0";
+	close $ssh_in;
+};
+
+die "$myName: failed to create remote repository"
+	unless $pid_ssh;
+
+waitpid($pid_ssh, 0);
+die "$myName: remote repository creation failed"
+	if $?;
+
+# Initialize git repository
+die "$myName: git init failed"
+	if run_sync_redir qw(git init -q);
+
+# Configure the repository
+die "$myName: config command failed"
+	if run_sync_redir $config->{CFGCMD};
+
+my $SSH_RPATH = "ssh://$config->{RLOGIN}$GRM_RPATH";
 
 # Check if remote exists, add or update it accordingly
-if git remote get-url origin &>/dev/null; then
-    # Remote exists, update it
-    echo -ne "$SSH_RPATH\0" | xargs -0 -n 1 -- git remote set-url origin
-	git fetch origin
-else
-    # Remote doesn't exist, add it
-    echo -ne "$SSH_RPATH\0" | xargs -0 -n 1 -- git remote add -f origin
-fi
+my $remote_exists = system('git remote get-url origin >/dev/null 2>&1') == 0;
 
-if (( 1 == $VIRGIN )); then
-	git checkout master
-fi
+if ($remote_exists) {
+	# Remote exists, update it
+	die "$myName: failed to update remote URL"
+		if run_sync_redir qw(git remote set-url origin), $SSH_RPATH;
+		
+	die "$myName: git fetch failed"
+		if run_sync_redir qw(git fetch origin);
+} else {
+	# Remote doesn't exist, add it
+	die "$myName: failed to add remote"
+		if run_sync_redir qw(git remote add -f origin), $SSH_RPATH;
+}
+
+# Checkout master if this was a new repository
+if ($VIRGIN) {
+	die "$myName: git checkout failed"
+		if run_sync_redir qw(git checkout master);
+}
+
+exit 0;
+
+########################################################################################################################
+
+sub run_sync_redir(@)
+{
+	my $pid;
+	eval {
+		$pid = open3(undef, '>&STDERR', '>&STDERR', @_);
+	};
+	
+	die "$myName: failed to run {@_}"
+		unless $pid;
+	
+	waitpid($pid, 0);
+	return $?;
+}
+
+sub indir ($&)
+{
+	my $dir = shift @_;
+	my $code = \&{shift @_};
+
+	my $orig = cwd;
+	chdir($dir);
+	my $result = $code->();
+	chdir($orig);
+	return $result;
+}
