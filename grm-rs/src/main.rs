@@ -26,19 +26,39 @@ enum Mode {
     /// Execute git commands
     Git,
     /// Update remote URL
+    #[clap(name = "set-remote")]
     SetRemote,
     /// Configure repositories
     Configure,
     /// List remote relative paths
+    #[clap(name = "list-rrel")]
     ListRrel,
     /// List remote URLs
+    #[clap(name = "list-rurl")]
     ListRurl,
     /// List local relative paths
+    #[clap(name = "list-lrel")]
     ListLrel,
     /// Run with clone and set-remote
     Run,
     /// Create new repositories
     New,
+}
+
+impl std::fmt::Display for Mode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Mode::Clone => write!(f, "clone"),
+            Mode::Git => write!(f, "git"),
+            Mode::SetRemote => write!(f, "set-remote"),
+            Mode::Configure => write!(f, "configure"),
+            Mode::ListRrel => write!(f, "list-rrel"),
+            Mode::ListRurl => write!(f, "list-rurl"),
+            Mode::ListLrel => write!(f, "list-lrel"),
+            Mode::Run => write!(f, "run"),
+            Mode::New => write!(f, "new"),
+        }
+    }
 }
 
 /// Config structure to hold GRM configuration
@@ -391,7 +411,7 @@ fn main() -> Result<()> {
     
     // Recursively process subdirectories if enabled
     if config.get_flag("OPT_RECURSE") {
-        recursive::recurse_listfiles(&current_dir, &config, &args.mode.to_string().to_lowercase())?;
+        recursive::recurse_listfiles(&current_dir, &config, &args.mode.to_string())?;
     }
     
     Ok(())
