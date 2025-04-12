@@ -328,8 +328,12 @@ sub repo_process
 
 	my $remoteURL;
 	if (length $config->{RLOGIN}) {
-		# Using the new RLOGIN and RPATH_BASE pattern
-		$remoteURL = "ssh://$config->{RLOGIN}$config->{RPATH_BASE}/$remotePath";
+		# RLOGIN must include protocol prefix for Git remote URLs
+		if ($config->{RLOGIN} =~ /^([a-z]+:\/\/)/) {
+			$remoteURL = "$config->{RLOGIN}$config->{RPATH_BASE}/$remotePath";
+		} else {
+			die "$myName: RLOGIN must include protocol prefix (e.g., ssh://, http://, https://)";
+		}
 	} elsif (length $config->{REMOTE_BASE_URL}) {
 		# Backward compatibility with REMOTE_BASE_URL
 		$remoteURL = "$config->{REMOTE_BASE_URL}/$remotePath";
