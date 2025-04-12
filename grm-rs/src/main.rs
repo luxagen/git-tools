@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use regex::Regex;
 
 mod process;
+mod recursive;
 
 /// Git Repository Manager - Rust implementation
 #[derive(Parser, Debug)]
@@ -69,6 +70,11 @@ impl Config {
             if key.starts_with("GRM_") {
                 let config_key = &key[4..]; // Remove GRM_ prefix
                 config.values.insert(config_key.to_string(), value);
+                
+                // Special case for recurse prefix
+                if config_key == "RECURSE_PREFIX" {
+                    config.recurse_prefix = config.values.get(config_key).unwrap().clone();
+                }
             }
         }
 
@@ -101,6 +107,18 @@ impl Config {
     /// Get a mode flag
     fn get_mode_flag(&self, mode: &str) -> bool {
         *self.mode_flags.get(mode).unwrap_or(&false)
+    }
+    
+    /// Get the current recurse prefix
+    fn get_recurse_prefix(&self) -> &str {
+        &self.recurse_prefix
+    }
+    
+    /// Get all configuration values
+    fn all_values(&self) -> Vec<(String, String)> {
+        self.values.iter()
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect()
     }
 
     /// Load configuration from a file
@@ -209,8 +227,9 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
             continue;
         }
         
-        // Parse the line: REMOTE_REL * LOCAL_REL * GM_REL
-        let parts: Vec<&str> = line.split('*').collect();
+        // Parse the line using the separator character (*)
+        let separator = "*";
+        let parts: Vec<&str> = line.split(separator).collect();
         if parts.len() < 1 {
             continue;
         }
@@ -249,6 +268,23 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         let remote_path = cat_path(&[remote_dir, remote_rel]);
         let local_path = cat_path(&[local_dir, local_rel]);
         let media_path = cat_path(&[gm_dir, gm_rel]);
+        
+        // Get the current directory for filtering
+        let current_dir = env::current_dir()?;
+        let tree_filter = current_dir.to_string_lossy().to_string();
+        
+        // Skip repositories outside the current tree
+        let full_local_path = Path::new(&local_path);
+        let is_in_tree = if full_local_path.is_absolute() {
+            full_local_path.to_string_lossy().contains(&tree_filter)
+        } else {
+            let full_path = current_dir.join(&local_path);
+            full_path.starts_with(&tree_filter)
+        };
+        
+        if !is_in_tree {
+            continue;
+        }
         
         // Process the repository
         if let Err(e) = process_repo(config, &local_path, &remote_path, &media_path) {
@@ -319,6 +355,9 @@ fn set_mode(config: &mut Config, mode: Mode) {
 }
 
 fn main() -> Result<()> {
+    // Initialize logging
+    env_logger::init();
+    
     // Parse command line arguments
     let args = Args::parse();
     
@@ -330,23 +369,49 @@ fn main() -> Result<()> {
     config.load_from_file(&conf_path)?;
     
     // Set mode based on command line args
-    set_mode(&mut config, args.mode);
+    set_mode(&mut config, args.mode.clone());
     
-    // Find and process listfile
+    // Get current directory for processing listfiles
+    let current_dir = env::current_dir()?;
+    
+    // Find directory containing listfile by walking up from current directory
+    let list_dir = find_listfile_dir(&config)?;
+    env::set_current_dir(&list_dir)?;
+    
+    // Process the listfile
     let list_fn = config.get("LIST_FN")
         .ok_or_else(|| anyhow!("LIST_FN not set in configuration"))?;
     
-    let listfile = PathBuf::from(list_fn);
+    let listfile = Path::new(list_fn);
     if !listfile.exists() {
         return Err(anyhow!("Listfile {} not found", listfile.display()));
     }
     
-    process_listfile(&mut config, &listfile)?;
+    process_listfile(&mut config, listfile)?;
     
-    // Implement the recursive listfile processing if OPT_RECURSE is set
+    // Recursively process subdirectories if enabled
     if config.get_flag("OPT_RECURSE") {
-        // TO DO: implement recursive listfile processing
+        recursive::recurse_listfiles(&current_dir, &config, &args.mode.to_string().to_lowercase())?;
     }
     
     Ok(())
+}
+
+/// Find directory containing listfile by walking up from current directory
+fn find_listfile_dir(config: &Config) -> Result<PathBuf> {
+    let list_fn = config.get("LIST_FN")
+        .ok_or_else(|| anyhow!("LIST_FN not set"))?;
+    
+    let mut current_dir = env::current_dir()?;
+    
+    loop {
+        let list_path = current_dir.join(list_fn);
+        if list_path.exists() {
+            return Ok(current_dir);
+        }
+        
+        if !current_dir.pop() {
+            return Err(anyhow!("Could not find listfile {} in current directory or any ancestor", list_fn));
+        }
+    }
 }
