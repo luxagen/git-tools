@@ -1,0 +1,109 @@
+diff --git a/grm b/grm
+index 80e89b2..b3513d4 100755
+--- a/grm
++++ b/grm
+@@ -155,6 +155,7 @@ sub config_clean
+ 	delete $hr->{MODE_LIST_RREL };
+ 	delete $hr->{MODE_LIST_RURL };
+ 	delete $hr->{MODE_LIST_LREL };
++	delete $hr->{MODE_NEW       };
+ 
+ 	return $hr;
+ }
+@@ -220,7 +221,7 @@ sub run_sync_redir(@)
+ {
+ 	my $pid;
+ 	eval {
+-		$pid = open3(undef, '>&STDERR', '>&STDERR', @_);
++		$pid = open3('>&STDIN', '>&STDERR', '>&STDERR', @_);
+ 	};
+ 	
+ 	die "$myName: failed to run {@_}"
+@@ -271,6 +272,7 @@ sub mode_set
+ 		list-rurl
+ 		list-lrel
+ 		run
++		new
+ 	);
+ 
+ 	use constant MODE_LIST_STR => join("\n",MODE_LIST);
+@@ -304,6 +306,7 @@ sub mode_set
+ 		$config->{MODE_LIST_RREL } = $mode eq   'list-rrel';
+ 		$config->{MODE_LIST_RURL } = $mode eq   'list-rurl';
+ 		$config->{MODE_LIST_LREL } = $mode eq   'list-lrel';
++		$config->{MODE_NEW       } = $mode eq        'new';
+ 	}
+ 
+ 	$config->{MODE_CONFIGURE} ||= $config->{MODE_CLONE}; # Cloning requires configuration as phase 2/3, before checkout
+@@ -346,6 +349,13 @@ sub repo_process
+ 
+ 	unless (-e $localPath)
+ 	{
++		if ($config->{MODE_NEW})
++		{
++			# For non-existent directories in 'new' mode, report an error
++			say STDERR "ERROR: ${\&format_output_path($config->{RECURSE_PREFIX}, $localPath)} does not exist";
++			return;
++		}
++
+ 		# We need to configure after clone but before checkout, thus the three steps
+ 		&repo_clone_nocheckout($localPath,$remoteURL);
+ 		&repo_config($localPath,$mediaPath);
+@@ -360,18 +370,50 @@ sub repo_process
+ 		return;
+ 	}
+ 
+-	# Don't touch non-repo dirs with a bargepole
+-	unless (&is_dir_repo_root($localPath))
++	if (&is_dir_repo_root($localPath))
++	{
++		if ($config->{MODE_NEW})
++		{
++			# In new mode, skip existing repositories
++			say STDERR "${\&format_output_path($config->{RECURSE_PREFIX}, $localPath)} already exists (skipping)";
++			return;
++		}
++
++		# For existing repos, don't clone but do update remote & configure
++		say STDERR "${\&format_output_path($config->{RECURSE_PREFIX}, $localPath)} exists";
++		&repo_set_remote($localPath,$remoteURL);
++		&repo_config($localPath,$mediaPath);
++		&repo_cmd($localPath);
++		return;
++	}
++
++	if (!$config->{MODE_NEW})
+ 	{
+ 		say STDERR "ERROR: ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)} is not a Git repository";
+ 		return;
+ 	}
+ 
+-	# For existing repos, don't clone but do update remote & configure
+-	say STDERR "${\&format_output_path($config->{RECURSE_PREFIX},$localPath)} exists";
+-	&repo_set_remote($localPath,$remoteURL);
+-	&repo_config($localPath,$mediaPath);
+-	&repo_cmd($localPath);
++	# In 'new' mode, call grm-new-repo to create the repository
++	say STDERR "Creating new Git repository in ${\&format_output_path($config->{RECURSE_PREFIX},$localPath)}";
++
++	# Ensure all environment variables are passed to grm-new-repo
++	local %ENV = %ENV;  # Start with the current environment
++
++	# Make sure required variables are set for grm-new-repo
++	foreach my $key (keys %$config) {
++		$ENV{"GRM_$key"} = $config->{$key} if defined $config->{$key};
++	}
++
++	# Run grm-new-repo in the target directory
++	my $result = indir $localPath, sub {
++		return run_sync_redir qw!grm-new-repo!;
++	};
++
++	die "$myName: grm-new-repo failed"
++		if $result;
++
++	# New mode only creates repository, no further processing
++	say STDERR "${\&format_output_path($config->{RECURSE_PREFIX}, $localPath)} created";
+ }
+ 
+ sub repo_clone_nocheckout
