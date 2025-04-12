@@ -34,6 +34,24 @@ if (@missing) {
 	exit 2;
 }
 
+# Ensure RLOGIN has valid protocol if set, or act as if it were ssh://localhost if blank
+my $ssh_host;
+my $effective_login;
+
+if (!length($config->{RLOGIN})) {
+    # Act as if using localhost via SSH if RLOGIN is blank
+    $ssh_host = 'localhost';
+    # Use ssh://localhost internally without modifying config
+    $effective_login = 'ssh://localhost';
+} elsif ($config->{RLOGIN} =~ /^ssh:\/\/(.+)$/) {
+    # RLOGIN has SSH protocol prefix - extract the host part for SSH command
+    $ssh_host = $1;
+    $effective_login = $config->{RLOGIN};
+} else {
+    say "Error: RLOGIN must be in format 'ssh://[user@]host' for SSH remote creation";
+    exit 3;
+}
+
 # Determine whether this dir is already a git repo
 my $VIRGIN = !(-d '.git');
 
@@ -63,21 +81,23 @@ if ($reply !~ /^[Yy]$/) {
 }
 
 # Create new remote repo based on remote template
-my $ssh_cmd = "xargs -0 -n 1 -- cp -na --reflink=auto '$config->{RPATH_BASE}/$config->{RPATH_TEMPLATE}'";
-my $pid_ssh;
+if ($effective_login =~ /^ssh:\/\/(.+)$/) {
+    my $ssh_cmd = "xargs -0 -n 1 -- cp -na --reflink=auto '$config->{RPATH_BASE}/$config->{RPATH_TEMPLATE}'";
+    my $pid_ssh;
 
-eval {
-	$pid_ssh = open3(my $ssh_in, '>&STDERR', '>&STDERR', 'ssh', $config->{RLOGIN}, $ssh_cmd);
-	print $ssh_in "$GRM_RPATH\0";
-	close $ssh_in;
-};
+    eval {
+        $pid_ssh = open3(my $ssh_in, '>&STDERR', '>&STDERR', 'ssh', $ssh_host, $ssh_cmd);
+        print $ssh_in "$GRM_RPATH\0";
+        close $ssh_in;
+    };
 
-die "$myName: failed to create remote repository"
-	unless $pid_ssh;
+    die "$myName: failed to create remote repository"
+        unless $pid_ssh;
 
-waitpid($pid_ssh, 0);
-die "$myName: remote repository creation failed"
-	if $?;
+    waitpid($pid_ssh, 0);
+    die "$myName: remote repository creation failed"
+        if $?;
+}
 
 # Initialize git repository
 die "$myName: git init failed"
@@ -87,7 +107,8 @@ die "$myName: git init failed"
 die "$myName: config command failed"
 	if run_sync_redir $config->{CONFIG_CMD};
 
-my $SSH_RPATH = "ssh://$config->{RLOGIN}$GRM_RPATH";
+# Git remote URL
+my $GIT_REMOTE = $effective_login.$GRM_RPATH;
 
 # Check if remote exists, add or update it accordingly
 my $remote_exists = system('git remote get-url origin >/dev/null 2>&1') == 0;
@@ -95,14 +116,14 @@ my $remote_exists = system('git remote get-url origin >/dev/null 2>&1') == 0;
 if ($remote_exists) {
 	# Remote exists, update it
 	die "$myName: failed to update remote URL"
-		if run_sync_redir qw(git remote set-url origin), $SSH_RPATH;
+		if run_sync_redir qw(git remote set-url origin), $GIT_REMOTE;
 		
 	die "$myName: git fetch failed"
 		if run_sync_redir qw(git fetch origin);
 } else {
 	# Remote doesn't exist, add it
 	die "$myName: failed to add remote"
-		if run_sync_redir qw(git remote add -f origin), $SSH_RPATH;
+		if run_sync_redir qw(git remote add -f origin), $GIT_REMOTE;
 }
 
 # Checkout master if this was a new repository
