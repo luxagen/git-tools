@@ -441,8 +441,8 @@ sub repo_config
 
 	die "$myName: repo_config failed"
 		if indir $localPath,sub {
-			# Use system with a single argument to preserve signal handling
-			return system($config->{CONFIG_CMD});
+			# Execute directly as a program with no shell interpretation
+			return system(split(' ', $config->{CONFIG_CMD}));
 		};
 }
 
