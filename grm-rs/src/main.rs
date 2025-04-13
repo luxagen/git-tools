@@ -55,13 +55,13 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 }
 
 /// Process a repository
-fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path: &str) -> Result<()> {
+fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_path: &str) -> Result<()> {
     // Get the current recurse prefix for path display
     let recurse_prefix = &config.recurse_prefix;
     
     // Create prefixed paths 
     let prefixed_local_path = format!("{}{}", recurse_prefix, local_path);
-    let prefixed_remote_path = format!("{}{}", recurse_prefix, remote_path);
+    let prefixed_remote_path = format!("{}{}", recurse_prefix, remote_rel_path);
     
     // Get operations
     let operations = get_operations();
@@ -78,26 +78,8 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     if operations.list_rurl {
-        // Get remote URL
-        let remote_url = match (&config.rlogin, &config.rpath_base) {
-            (Some(login), Some(base)) => {
-                // Handle escaping characters in remote paths
-                let clean_remote_path = normalize_path_for_url(remote_path);
-                
-                // Ensure login and base are properly formatted
-                let login = login.trim_end_matches('/');
-                let base = base.trim_matches('/');
-                
-                if login.contains("://") {
-                    // Login already has protocol
-                    format!("{}//{}/{}", login, base, clean_remote_path)
-                } else {
-                    // Simple login without protocol
-                    format!("{}:{}/{}", login, base, clean_remote_path)
-                }
-            },
-            _ => remote_path.to_string(),
-        };
+        // Generate remote URL using only the remote relative path
+        let remote_url = get_remote_url(config, remote_rel_path);
         println!("{}", remote_url);
         return Ok(());
     }
@@ -123,29 +105,8 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             return Ok(());
         }
         
-        // Get remote URL
-        let remote_url = match (&config.rlogin, &config.rpath_base) {
-            (Some(login), Some(base)) => {
-                // Handle escaping characters in remote paths
-                let clean_remote_path = normalize_path_for_url(remote_path);
-                
-                // Ensure login and base are properly formatted
-                let login = login.trim_end_matches('/');
-                let base = base.trim_matches('/');
-                
-                if login.contains("://") {
-                    // Login already has protocol
-                    format!("{}//{}/{}", login, base, clean_remote_path)
-                } else {
-                    // Simple login without protocol
-                    format!("{}:{}/{}", login, base, clean_remote_path)
-                }
-            },
-            _ => remote_path.to_string(),
-        };
-        
         // Clone, configure, and checkout
-        repository::clone_repo_no_checkout(local_path, &remote_url)?;
+        repository::clone_repo_no_checkout(local_path, &get_remote_url(config, remote_rel_path))?;
         repository::configure_repo(local_path, media_path, config)?;
         repository::check_out(local_path)?;
         
@@ -174,30 +135,12 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         }
         
         // Get remote URL
-        let remote_url = match (&config.rlogin, &config.rpath_base) {
-            (Some(login), Some(base)) => {
-                // Handle escaping characters in remote paths
-                let clean_remote_path = normalize_path_for_url(remote_path);
-                
-                // Ensure login and base are properly formatted
-                let login = login.trim_end_matches('/');
-                let base = base.trim_matches('/');
-                
-                if login.contains("://") {
-                    // Login already has protocol
-                    format!("{}//{}/{}", login, base, clean_remote_path)
-                } else {
-                    // Simple login without protocol
-                    format!("{}:{}/{}", login, base, clean_remote_path)
-                }
-            },
-            _ => remote_path.to_string(),
-        };
+        let remote_url = get_remote_url(config, remote_rel_path);
         eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
         if operations.set_remote {
-            repository::set_remote(local_path, &remote_url)?;
+            repository::set_remote(local_path, &get_remote_url(config, remote_rel_path))?;
         }
         
         if operations.configure {
@@ -227,7 +170,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     if path.exists() {
         // New mode for existing directory
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
-        repository::create_new(local_path, remote_path, config)?;
+        repository::create_new(local_path, remote_rel_path, config)?;
         eprintln!("{} created", prefixed_local_path);
     } else {
         // Directory doesn't exist, just skip it
@@ -334,7 +277,6 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     };
     
     // Get directory values from config
-    let remote_dir = config.remote_dir.as_deref().unwrap_or("");
     let local_dir = config.local_dir.as_deref().unwrap_or("");
     let gm_dir = config.gm_dir.as_deref().unwrap_or("");
     
@@ -437,6 +379,29 @@ fn unescape_backslashes(s: &str) -> String {
     }
     
     result
+}
+
+/// Get formatted remote URL based on configuration and remote relative path
+fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
+    match (&config.rlogin, &config.rpath_base) {
+        (Some(login), Some(base)) => {
+            // Handle escaping characters in remote paths
+            let clean_remote_path = normalize_path_for_url(remote_rel_path);
+            
+            // Ensure login and base are properly formatted
+            let login = login.trim_end_matches('/');
+            let base = base.trim_matches('/');
+            
+            if login.contains("://") {
+                // Login already has protocol
+                format!("{}//{}/{}", login, base, clean_remote_path)
+            } else {
+                // Simple login without protocol
+                format!("{}:{}/{}", login, base, clean_remote_path)
+            }
+        },
+        _ => remote_rel_path.to_string(),
+    }
 }
 
 fn main() -> Result<()> {
