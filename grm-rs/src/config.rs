@@ -3,6 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
+use lazy_static::lazy_static;
 
 /// Typed configuration values with proper types for each setting
 #[derive(Debug, Clone)]
@@ -130,17 +131,19 @@ impl Config {
     
     /// Get a configuration value by typed key
     pub fn get_by_key(&self, key: ConfigKey) -> Option<&String> {
-        static ENABLED: String = String::new() + "1";
-        static DISABLED: String = String::new();
+        lazy_static! {
+            static ref ENABLED: String = "1".to_string();
+            static ref DISABLED: String = String::new();
+        }
         
         match key {
             ConfigKey::ConfigFilename => Some(&self.config_filename),
             ConfigKey::ListFilename => Some(&self.list_filename),
             ConfigKey::RecurseEnabled => {
                 if self.recurse_enabled {
-                    Some(&ENABLED)
+                    Some(&*ENABLED)
                 } else {
-                    Some(&DISABLED)
+                    Some(&*DISABLED)
                 }
             },
             ConfigKey::RLogin => self.rlogin.as_ref(),
@@ -254,12 +257,13 @@ impl Config {
         for (key, value) in std::env::vars() {
             if key.starts_with("GRM_") {
                 let config_key = key[4..].to_string(); // Remove GRM_ prefix
-                self.set(config_key, value);
                 
-                // Special case for recurse prefix
+                // Special case for recurse prefix to avoid move issue
                 if key == "GRM_RECURSE_PREFIX" {
-                    self.recurse_prefix = value;
+                    self.recurse_prefix = value.clone();
                 }
+                
+                self.set(config_key, value);
             }
         }
     }
