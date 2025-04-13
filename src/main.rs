@@ -344,7 +344,7 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         let gm_rel = if parts.len() >= 3 { parts[2].trim() } else { "" };
         
         // Extract repo name from remote path for default values
-        let re = Regex::new(r"(?:.*(?<!/))?(.*?)(?:\.git)?$").unwrap();
+        let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
         let repo_name = match re.captures(remote_rel) {
             Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
             None => "",
