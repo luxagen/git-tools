@@ -38,13 +38,10 @@ struct Args {
 
 /// Find the nearest configuration file by walking up directories
 fn find_conf_file(config: &Config) -> Result<PathBuf> {
-    let config_filename = config.get("CONFIG_FILENAME")
-        .ok_or_else(|| anyhow!("CONFIG_FILENAME not set"))?;
-    
     let mut current_dir = env::current_dir()?;
     
     loop {
-        let conf_path = current_dir.join(config_filename);
+        let conf_path = current_dir.join(&config.config_filename);
         if conf_path.exists() {
             return Ok(conf_path);
         }
@@ -60,7 +57,7 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 /// Process a repository
 fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path: &str) -> Result<()> {
     // Get the current recurse prefix for path display
-    let recurse_prefix = config.get_recurse_prefix();
+    let recurse_prefix = &config.recurse_prefix;
     
     // Create prefixed paths 
     let prefixed_local_path = format!("{}{}", recurse_prefix, local_path);
@@ -80,7 +77,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     if get_mode_config().get_flag("MODE_LIST_RURL") {
         // Construct remote URL using the remote_path (without prefix)
         // since the remote server paths include the full hierarchy
-        let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
+        let remote_url = match (&config.rlogin, &config.rpath_base) {
             (Some(login), Some(base)) => {
                 // Handle escaping characters in remote paths
                 let clean_remote_path = normalize_path_for_url(remote_path);
@@ -116,7 +113,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         }
         
         // Get remote URL
-        let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
+        let remote_url = match (&config.rlogin, &config.rpath_base) {
             (Some(login), Some(base)) => {
                 // Handle escaping characters in remote paths
                 let clean_remote_path = normalize_path_for_url(remote_path);
@@ -147,7 +144,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         }
         
         // Get remote URL
-        let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
+        let remote_url = match (&config.rlogin, &config.rpath_base) {
             (Some(login), Some(base)) => {
                 // Handle escaping characters in remote paths
                 let clean_remote_path = normalize_path_for_url(remote_path);
@@ -169,7 +166,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         
         if get_mode_config().get_flag("MODE_GIT") {
             // Execute git commands in the repository
-            if let Some(git_args) = config.get("GIT_ARGS") {
+            if let Some(git_args) = &config.git_args {
                 repository::run_git_command(local_path, git_args)?;
             }
         }
@@ -204,52 +201,54 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
 fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
     let file = File::open(path)
         .with_context(|| format!("Failed to open listfile: {}", path.display()))?;
-    
+        
     let reader = BufReader::new(file);
+    
+    // Get current directory for filtering
+    let current_dir = env::current_dir()?;
+    let tree_filter = current_dir.to_string_lossy().to_string();
+    
+    // Get configuration for repository processing
+    let remote_dir = config.remote_dir.as_deref().unwrap_or("");
+    let local_dir = config.local_dir.as_deref().unwrap_or("");
+    let gm_dir = config.gm_dir.as_deref().unwrap_or("");
+    
     for line in reader.lines() {
         let line = line?;
         
+        // Process line to extract fields
+        let fields = split_with_escapes(&line, LIST_SEPARATOR);
+        
         // Skip comments and empty lines
-        let line = line.trim();
-        if line.is_empty() || line.starts_with('#') {
+        if fields.is_empty() || fields[0].starts_with('#') || fields[0].trim().is_empty() {
             continue;
         }
         
-        // Parse the line using the separator character (*)
-        let separator = LIST_SEPARATOR;
-        let parts = split_with_escapes(line, separator);
-        if parts.len() < 1 {
-            continue;
-        }
-        
-        // Get the raw paths from the listfile
-        let remote_rel_raw = parts[0].clone();
-        
-        if remote_rel_raw.is_empty() {
-            // This is a configuration line
-            if parts.len() >= 3 {
-                let key = parts[1].clone();
-                let value = parts[2].clone();
-                if !key.is_empty() {
-                    config.set(key, value);
-                }
+        // Handle config lines (no remote rel path)
+        if fields.len() >= 2 && (fields[0].is_empty() || fields[0].trim().is_empty()) {
+            // This is a config line
+            if fields.len() >= 3 {
+                // Format: * KEY * VALUE
+                let key = fields[1].trim().to_string();
+                let value = fields[2].trim().to_string();
+                config.set_from_string(key, value);
             }
             continue;
         }
         
         // Extract repo name from remote path for default values
         let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-        let repo_name = match re.captures(&remote_rel_raw) {
+        let repo_name = match re.captures(&fields[0]) {
             Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
             None => "",
         };
         
         // Get remaining path parts
-        let local_rel_raw = if parts.len() >= 2 { parts[1].clone() } else { String::new() };
-        let gm_rel_raw = if parts.len() >= 3 { parts[2].clone() } else { String::new() };
+        let local_rel_raw = if fields.len() >= 2 { fields[1].clone() } else { String::new() };
+        let gm_rel_raw = if fields.len() >= 3 { fields[2].clone() } else { String::new() };
         
         // Unescape all paths - do this once and store as String
-        let remote_rel_unescaped = unescape_backslashes(&remote_rel_raw);
+        let remote_rel_unescaped = unescape_backslashes(&fields[0]);
         
         // Apply defaults and unescape
         let local_rel_unescaped = if local_rel_raw.is_empty() {
@@ -265,10 +264,6 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         };
         
         // Construct full paths
-        let remote_dir = config.get("REMOTE_DIR").map(|s| s.as_str()).unwrap_or("");
-        let local_dir = config.get("LOCAL_DIR").map(|s| s.as_str()).unwrap_or("");
-        let gm_dir = config.get("GM_DIR").map(|s| s.as_str()).unwrap_or("");
-        
         let remote_path = cat_path(&[remote_dir, &remote_rel_unescaped]);
         let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
         let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
@@ -386,14 +381,12 @@ fn main() -> Result<()> {
     // Store git command arguments if in git mode
     if args.mode.to_string() == "git" && !args.args.is_empty() {
         let git_args = args.args.join(" ");
-        config.set("GIT_ARGS".to_string(), git_args);
+        config.git_args = Some(git_args);
     }
     
     // Get listfile directory and path
     let list_dir = find_listfile_dir(&config)?;
-    let list_file_name = config.get("LIST_FN")
-        .ok_or_else(|| anyhow!("LIST_FN not set"))?;
-    let list_path = list_dir.join(list_file_name);
+    let list_path = list_dir.join(&config.list_filename);
     
     // Process listfile
     if list_path.exists() {
@@ -407,19 +400,16 @@ fn main() -> Result<()> {
 
 /// Find directory containing listfile by walking up from current directory
 fn find_listfile_dir(config: &Config) -> Result<PathBuf> {
-    let list_fn = config.get("LIST_FN")
-        .ok_or_else(|| anyhow!("LIST_FN not set"))?;
-    
     let mut current_dir = env::current_dir()?;
     
     loop {
-        let list_path = current_dir.join(list_fn);
+        let list_path = current_dir.join(&config.list_filename);
         if list_path.exists() {
             return Ok(current_dir);
         }
         
         if !current_dir.pop() {
-            return Err(anyhow!("Could not find listfile {} in current directory or any ancestor", list_fn));
+            return Err(anyhow!("Could not find listfile {} in current directory or any ancestor", config.list_filename));
         }
     }
 }
