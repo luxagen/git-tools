@@ -86,8 +86,8 @@ fn recurse_to_subdirectory(path: &Path, config: &Config, mode: &str) -> Result<(
     
     // Add all config values with GRM_ prefix
     for (key, value) in config.all_values() {
-        if key == "MODE" || key.starts_with("MODE_") || key == "RECURSE_PREFIX" {
-            // Don't pass mode flags or recurse prefix (already handled)
+        if key == "RECURSE_PREFIX" {
+            // Don't pass recurse prefix (already handled)
             continue;
         }
         
