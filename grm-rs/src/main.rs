@@ -207,74 +207,79 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
 }
 
 /// Process a listfile (similar to listfile_process in Perl)
-fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
-    let file = File::open(path)
-        .with_context(|| format!("Failed to open listfile: {}", path.display()))?;
-        
-    let reader = BufReader::new(file);
+fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
+    let contents = fs::read_to_string(list_path)
+        .with_context(|| format!("Failed to read {}", list_path.display()))?;
     
-    // Get current directory for filtering
-    let current_dir = env::current_dir()?;
-    let tree_filter = current_dir.to_string_lossy().to_string();
-    
-    // Process each line in the listfile
-    for line in reader.lines() {
-        let line = line?;
+    // Process each line in the file
+    for line in contents.lines() {
+        let line = line.trim();
         
-        // Process line to extract fields
-        let fields = split_with_escapes(&line, LIST_SEPARATOR);
-        
-        // Skip comments and empty lines
-        if fields.is_empty() || fields[0].starts_with('#') || fields[0].trim().is_empty() {
+        // Skip empty lines and comments
+        if line.is_empty() || line.starts_with('#') {
             continue;
         }
         
-        // Handle config lines (no remote rel path)
-        if fields.len() >= 2 && (fields[0].is_empty() || fields[0].trim().is_empty()) {
-            // This is a config line
-            if fields.len() >= 3 {
-                // Format: * KEY * VALUE
-                let key = fields[1].trim().to_string();
-                let value = fields[2].trim().to_string();
-                config.set_from_string(key, value);
-            }
-            continue;
+        process_repo_line(config, line);
+    }
+    
+    // Process subdirectories if recursion is enabled
+    let operations = get_operations();
+    if operations.recurse {
+        let parent_dir = list_path.parent().unwrap_or(Path::new("."));
+        if let Err(err) = recursive::recurse_listfiles(parent_dir, config, 
+                                                       &get_mode_string()) {
+            eprintln!("Error during recursion: {}", err);
         }
-        
-        // Process repository lines
-        process_repo_line(config, &fields, &current_dir, &tree_filter)?;
     }
     
     Ok(())
 }
 
+/// Get the current mode string
+fn get_mode_string() -> String {
+    let operations = get_operations();
+    if operations.list_local { return "list-local".to_string(); }
+    if operations.list_remote { return "list-remote".to_string(); }
+    if operations.list_lrel { return "list-lrel".to_string(); }
+    if operations.list_rrel { return "list-rrel".to_string(); }
+    if operations.list_rurl { return "list-rurl".to_string(); }
+    if operations.clone { return "clone".to_string(); }
+    if operations.configure { return "configure".to_string(); }
+    if operations.set_remote { return "set-remote".to_string(); }
+    if operations.set_branch { return "set-branch".to_string(); }
+    if operations.git { return "git".to_string(); }
+    if operations.new { return "new".to_string(); }
+    "status".to_string() // default
+}
+
 /// Process a repository line from a listfile
-fn process_repo_line(config: &mut Config, fields: &[String], current_dir: &Path, tree_filter: &str) -> Result<()> {
+fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     // Extract repo name from remote path for default values
     let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-    let repo_name = match re.captures(&fields[0]) {
+    let repo_name = match re.captures(line) {
         Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
         None => "",
     };
     
     // Get remaining path parts
-    let local_rel_raw = if fields.len() >= 2 { fields[1].clone() } else { String::new() };
-    let gm_rel_raw = if fields.len() >= 3 { fields[2].clone() } else { String::new() };
+    let local_rel_raw = "";
+    let gm_rel_raw = "";
     
     // Unescape all paths - do this once and store as String
-    let remote_rel_unescaped = unescape_backslashes(&fields[0]);
+    let remote_rel_unescaped = unescape_backslashes(line);
     
     // Apply defaults and unescape
     let local_rel_unescaped = if local_rel_raw.is_empty() {
         repo_name.to_string()
     } else {
-        unescape_backslashes(&local_rel_raw)
+        unescape_backslashes(local_rel_raw)
     };
     
     let gm_rel_unescaped = if gm_rel_raw.is_empty() {
         repo_name.to_string()
     } else {
-        unescape_backslashes(&gm_rel_raw)
+        unescape_backslashes(gm_rel_raw)
     };
     
     // Get directory values from config
@@ -289,15 +294,6 @@ fn process_repo_line(config: &mut Config, fields: &[String], current_dir: &Path,
     
     if get_operations().debug {
         eprintln!("Potential target: {}", local_path);
-    }
-    
-    // Only process repositories in the current directory tree
-    let full_local_path = cat_path(&[&current_dir.to_string_lossy(), &local_path]);
-    if !full_local_path.contains(tree_filter) {
-        if get_operations().debug {
-            eprintln!("Skipping {} (outside current directory tree)", local_path);
-        }
-        return Ok(());
     }
     
     // Process the repository
@@ -404,6 +400,9 @@ fn main() -> Result<()> {
     let conf_path = find_conf_file(&config)?;
     config.load_from_file(&conf_path)?;
     
+    // Load configuration from environment variables
+    config.load_from_env();
+    
     // Initialize operations
     initialize_operations(args.mode);
     
@@ -421,15 +420,6 @@ fn main() -> Result<()> {
     if list_path.exists() {
         if let Err(err) = process_listfile(&mut config, &list_path) {
             eprintln!("Error processing listfile: {}", err);
-        }
-        
-        // Process subdirectories if recursion is enabled
-        let operations = get_operations();
-        if operations.recurse {
-            let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-            if let Err(err) = recursive::recurse_listfiles(&current_dir, &config, &args.mode.to_string()) {
-                eprintln!("Error during recursion: {}", err);
-            }
         }
     } else {
         eprintln!("No .grm.repos file found");

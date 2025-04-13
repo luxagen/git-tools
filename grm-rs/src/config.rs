@@ -100,12 +100,11 @@ impl Config {
         result
     }
     
-    /// Load configuration from environment variables
+    /// Load configuration from environment variables starting with GRM_
     pub fn load_from_env(&mut self) {
         for (key, value) in std::env::vars() {
-            if key.starts_with("GRM_") {
-                let config_key = key[4..].to_string(); // Remove GRM_ prefix
-                self.set_from_string(config_key, value);
+            if let Some(conf_key) = key.strip_prefix("GRM_") {
+                self.set_from_string(conf_key.to_string(), value);
             }
         }
     }
