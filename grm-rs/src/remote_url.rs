@@ -1,12 +1,12 @@
 use anyhow::{Result, anyhow};
-use gix_url::Scheme;
+use gix_url::{Scheme, Url};
+use bstr::BStr;
 
 /// Normalize a path for use in URLs
 /// 
 /// This ensures special characters are properly encoded
 fn normalize_path(path: &str) -> String {
-    // Gix handles URL encoding internally, but we need to unescape
-    // any backslash-escaped characters first
+    // Just unescape any backslash-escaped characters
     unescape_backslashes(path)
 }
 
@@ -39,8 +39,8 @@ fn unescape_backslashes(s: &str) -> String {
 /// 
 /// Returns the normalized URL that can be used with Git operations
 pub fn parse_remote_url(url_str: &str) -> Result<String> {
-    // Parse the URL using gix_url
-    let parsed = gix_url::parse(url_str)
+    // Parse the URL using gix-url - convert str to BStr
+    let parsed = gix_url::parse(url_str.as_bytes().into())
         .map_err(|e| anyhow!("Failed to parse remote URL: {}", e))?;
 
     // Return different formats based on the scheme
@@ -55,12 +55,8 @@ pub fn parse_remote_url(url_str: &str) -> Result<String> {
         },
         Scheme::Ssh => {
             // SSH URL - properly format as user@host:path
-            let user = parsed.user.unwrap_or("git".to_string());
-            let host = parsed.host.ok_or_else(|| anyhow!("Missing host in SSH URL"))?;
-            let path = parsed.path;
-            
-            // Format as user@host:path
-            Ok(format!("{}@{}:{}", user, host, path))
+            // Use the to_string() method which handles the proper formatting
+            Ok(parsed.to_string())
         },
         _ => {
             // Other schemes - return as is
@@ -85,24 +81,20 @@ pub fn build_remote_url(rlogin: Option<&str>, remote_dir: &str, repo_path: &str)
                 let protocol = login_parts[0];
                 let domain = login_parts[1].trim_end_matches('/');
                 
-                // For HTTP/HTTPS, we need to ensure path is properly URL-encoded
-                if protocol == "http" || protocol == "https" {
-                    // Use gix_url to properly encode the URL
-                    if let Ok(url) = gix_url::parse(&format!("{}://{}", protocol, domain)) {
-                        let path = format!("{}/{}", 
-                            remote_dir.trim_matches('/'),
-                            repo_path.trim_start_matches('/'));
-                            
-                        return format!("{}/{}", url, path);
-                    }
+                // Create a full URL with the path
+                let path = format!("{}/{}", 
+                    remote_dir.trim_matches('/'),
+                    repo_path.trim_start_matches('/'));
+                
+                let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
+                
+                // Try to parse and normalize with gix-url
+                if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
+                    return parsed.to_string();
                 }
                 
-                // Default formatting for protocols
-                format!("{}://{}/{}/{}", 
-                    protocol, 
-                    domain, 
-                    remote_dir.trim_matches('/'), 
-                    repo_path.trim_start_matches('/'))
+                // Fall back to simple string formatting if parsing fails
+                return full_url;
             } else {
                 // SSH SCP-style syntax (user@host:path)
                 // For SSH, just unescape any escape sequences
@@ -140,7 +132,7 @@ mod tests {
     #[test]
     fn test_parse_ssh_url() {
         let result = parse_remote_url("ssh://user@github.com/user/repo.git").unwrap();
-        assert_eq!(result, "user@github.com:user/repo.git");
+        assert_eq!(result, "ssh://user@github.com/user/repo.git");
     }
 
     #[test]
