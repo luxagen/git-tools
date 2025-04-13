@@ -75,10 +75,6 @@ pub fn parse_remote_url(url_str: &str) -> Result<String> {
 /// * `remote_dir` - Remote directory path
 /// * `repo_path` - Repository path
 pub fn build_remote_url(rlogin: Option<&str>, remote_dir: &str, repo_path: &str) -> String {
-    // Normalize paths to handle special characters
-    let clean_remote_dir = normalize_path(remote_dir);
-    let clean_repo_path = normalize_path(repo_path);
-    
     match rlogin {
         Some(login) if !login.is_empty() => {
             let login = login.trim_end_matches('/');
@@ -89,24 +85,38 @@ pub fn build_remote_url(rlogin: Option<&str>, remote_dir: &str, repo_path: &str)
                 let protocol = login_parts[0];
                 let domain = login_parts[1].trim_end_matches('/');
                 
+                // For HTTP/HTTPS, we need to ensure path is properly URL-encoded
+                if protocol == "http" || protocol == "https" {
+                    // Use gix_url to properly encode the URL
+                    if let Ok(url) = gix_url::parse(&format!("{}://{}", protocol, domain)) {
+                        let path = format!("{}/{}", 
+                            remote_dir.trim_matches('/'),
+                            repo_path.trim_start_matches('/'));
+                            
+                        return format!("{}/{}", url, path);
+                    }
+                }
+                
+                // Default formatting for protocols
                 format!("{}://{}/{}/{}", 
                     protocol, 
                     domain, 
-                    clean_remote_dir.trim_matches('/'), 
-                    clean_repo_path.trim_start_matches('/'))
+                    remote_dir.trim_matches('/'), 
+                    repo_path.trim_start_matches('/'))
             } else {
                 // SSH SCP-style syntax (user@host:path)
+                // For SSH, just unescape any escape sequences
                 format!("{}:{}/{}", 
                     login, 
-                    clean_remote_dir.trim_matches('/'),
-                    clean_repo_path.trim_start_matches('/'))
+                    unescape_backslashes(remote_dir).trim_matches('/'),
+                    unescape_backslashes(repo_path).trim_start_matches('/'))
             }
         },
         _ => {
-            // Local path - just join the components
+            // Local path - just unescape and join
             format!("{}/{}", 
-                clean_remote_dir.trim_end_matches('/'),
-                clean_repo_path.trim_start_matches('/'))
+                unescape_backslashes(remote_dir).trim_end_matches('/'),
+                unescape_backslashes(repo_path).trim_start_matches('/'))
         }
     }
 }
