@@ -290,7 +290,7 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     
     // Construct full paths
     let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
-    let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
+    let media_path = get_media_repo_path(config, &gm_rel_unescaped);
     
     if get_operations().debug {
         eprintln!("Potential target: {}", local_path);
@@ -408,6 +408,21 @@ fn get_remote_repo_path(config: &Config, repo_path: &str) -> String {
             format!("{}/{}", remote_dir, repo_path)
         } else {
             remote_dir.to_string()
+        }
+    } else {
+        repo_path.to_string()
+    }
+}
+
+/// Generate a complete media repository path by combining gm_dir and repo_path
+pub fn get_media_repo_path(config: &Config, repo_path: &str) -> String {
+    let gm_dir = config.gm_dir.as_deref().unwrap_or("");
+    
+    if !gm_dir.is_empty() {
+        if !repo_path.is_empty() {
+            format!("{}/{}", gm_dir, repo_path)
+        } else {
+            gm_dir.to_string()
         }
     } else {
         repo_path.to_string()
