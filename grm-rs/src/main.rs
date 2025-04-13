@@ -60,16 +60,18 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     // Get the current recurse prefix for path display
     let recurse_prefix = &config.recurse_prefix;
     
-    // Create prefixed paths 
+    // Create prefixed paths - only apply prefix to local path, not remote
     let prefixed_local_path = format!("{}{}", recurse_prefix, local_path);
-    let prefixed_remote_path = format!("{}{}", recurse_prefix, remote_rel_path);
+    
+    // Remote paths should NEVER have the recurse_prefix added
+    let remote_repo_path = get_remote_repo_path(config, remote_rel_path);
     
     // Get operations
     let operations = get_operations();
     
     // Different behavior based on mode flags
     if operations.list_rrel {
-        println!("{}", prefixed_remote_path);
+        println!("{}", remote_repo_path);
         return Ok(());
     }
     
@@ -392,25 +394,29 @@ fn unescape_backslashes(s: &str) -> String {
     result
 }
 
-/// Get formatted remote URL based on configuration and remote relative path
-fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
-    // Get the remote directory, defaulting to empty string if not set
+/// Generate a complete remote repository path by combining remote_dir and repo_path
+fn get_remote_repo_path(config: &Config, repo_path: &str) -> String {
+    // ONLY use remote_dir, NEVER use local_dir or gm_dir
     let remote_dir = config.remote_dir.as_deref().unwrap_or("");
     
-    // Get the base path, defaulting to empty string if not set
-    let base_path = config.rpath_base.as_deref().unwrap_or("");
-    
-    // Combine the paths: base_path + remote_dir + remote_rel_path
-    // First build the complete repository path
-    let full_repo_path = if !remote_dir.is_empty() {
-        if !remote_rel_path.is_empty() {
-            format!("{}/{}", remote_dir, remote_rel_path)
+    if !remote_dir.is_empty() {
+        if !repo_path.is_empty() {
+            format!("{}/{}", remote_dir, repo_path)
         } else {
             remote_dir.to_string()
         }
     } else {
-        remote_rel_path.to_string()
-    };
+        repo_path.to_string()
+    }
+}
+
+/// Get formatted remote URL based on configuration and remote relative path
+fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
+    // Get the base path, defaulting to empty string if not set
+    let base_path = config.rpath_base.as_deref().unwrap_or("");
+    
+    // Get the complete repository path
+    let full_repo_path = get_remote_repo_path(config, remote_rel_path);
     
     // Then use our remote_url module to build the URL with login and combined path
     match &config.rlogin {
