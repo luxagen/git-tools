@@ -9,6 +9,7 @@ use regex::Regex;
 
 mod process;
 mod recursive;
+mod repository;
 
 /// Git Repository Manager - Rust implementation
 #[derive(Parser, Debug)]
@@ -199,10 +200,7 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 }
 
 /// Process a repository
-fn process_repo(config: &Config, local_path: &str, remote_path: &str, _media_path: &str) -> Result<()> {
-    // Implement the repository processing logic similar to the Perl version
-    println!("Processing repository: local={}, remote={}", local_path, remote_path);
-    
+fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path: &str) -> Result<()> {
     // Different behavior based on mode flags
     if config.get_mode_flag("MODE_LIST_RREL") {
         println!("{}", remote_path);
@@ -224,15 +222,92 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, _media_pat
         return Ok(());
     }
     
-    // Continue with other mode operations like clone, configure, etc.
-    // This would be a direct translation of the corresponding Perl functions
+    // Skip processing for listing modes
+    if config.get_mode_flag("MODE_LIST_RREL") || 
+       config.get_mode_flag("MODE_LIST_LREL") || 
+       config.get_mode_flag("MODE_LIST_RURL") {
+        return Ok(());
+    }
+    
+    // Get local path info
+    let path = Path::new(local_path);
+    
+    // Process based on path state
+    if !path.exists() {
+        if config.get_mode_flag("MODE_NEW") {
+            eprintln!("ERROR: {} does not exist", local_path);
+            return Ok(());
+        }
+        
+        // Get remote URL
+        let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
+            (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
+            _ => remote_path.to_string(),
+        };
+        
+        // Clone, configure, and checkout
+        repository::clone_repo_no_checkout(local_path, &remote_url)?;
+        repository::configure_repo(local_path, media_path, config)?;
+        repository::check_out(local_path)?;
+        
+        return Ok(());
+    }
+    
+    // Check if path is a directory
+    if !path.is_dir() {
+        eprintln!("ERROR: {} is not a directory", local_path);
+        return Ok(());
+    }
+    
+    // Check if directory is a git repository
+    if repository::is_dir_repo_root(local_path)? {
+        if config.get_mode_flag("MODE_NEW") {
+            eprintln!("{} already exists (skipping)", local_path);
+            return Ok(());
+        }
+        
+        // Get remote URL
+        let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
+            (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
+            _ => remote_path.to_string(),
+        };
+        
+        eprintln!("{} exists", local_path);
+        
+        // Update remote and configure
+        if config.get_mode_flag("MODE_SET_REMOTE") {
+            repository::set_remote(local_path, &remote_url)?;
+        }
+        
+        if config.get_mode_flag("MODE_CONFIGURE") {
+            repository::configure_repo(local_path, media_path, config)?;
+        }
+        
+        if config.get_mode_flag("MODE_GIT") {
+            // Execute git commands in the repository
+            // Implementation would depend on command-line arguments
+        }
+        
+        return Ok(());
+    }
+    
+    // Handle non-repo directories
+    if !config.get_mode_flag("MODE_NEW") {
+        eprintln!("ERROR: {} is not a Git repository", local_path);
+        return Ok(());
+    }
+    
+    // New mode for existing directory
+    eprintln!("Creating new Git repository in {}", local_path);
+    repository::create_new(local_path, remote_path, config)?;
+    eprintln!("{} created", local_path);
     
     Ok(())
 }
 
 /// Process a listfile (similar to listfile_process in Perl)
 fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
-    println!("Processing listfile: {}", path.display());
+    eprintln!("Processing listfile: {}", path.display());
     
     let file = File::open(path)
         .with_context(|| format!("Failed to open listfile: {}", path.display()))?;

@@ -1,5 +1,4 @@
-use std::process::{Command, Output, Stdio};
-use std::io::{self, Write};
+use std::process::{Command, Stdio};
 use anyhow::{Context, Result, anyhow};
 
 /// Execute a command synchronously and redirect all output to stderr.
@@ -68,9 +67,6 @@ pub fn run_in_dir(dir: &str, args: &[&str]) -> Result<i32> {
 
 /// Execute a git command and return its output
 pub fn git_command(args: &[&str]) -> Result<String> {
-    let mut cmd_args = vec!["git"];
-    cmd_args.extend(args);
-    
     let output = Command::new("git")
         .args(args)
         .stdout(Stdio::piped())
