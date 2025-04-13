@@ -98,7 +98,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
             return Ok(());
         }
         
-        // Only clone if MODE_CLONE is set
+        // Only clone if clone operation is enabled
         if !operations.clone {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
