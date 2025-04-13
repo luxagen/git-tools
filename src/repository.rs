@@ -43,110 +43,7 @@ pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> 
 
 /// Configure a repository using the provided command
 pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
-    let config_cmd = match config.get("CONFIG_CMD") {
-        Some(cmd) => cmd.clone(),
-        None => return Ok(()),  // Skip if no configure command
-    };
-    
-    // Try to detect the shell environment
-    let shell_cmd = detect_shell_command(&config_cmd)?;
-    
-    // Execute through the detected shell
-    let status = Command::new(shell_cmd.executable)
-        .args(&shell_cmd.args)
-        .current_dir(local_path)
-        .stdin(std::process::Stdio::inherit())
-        .stdout(std::process::Stdio::inherit())
-        .stderr(std::process::Stdio::inherit())
-        .status()
-        .with_context(|| format!("Failed to execute config command in {}: {}", local_path, config_cmd))?;
-    
-    if !status.success() {
-        return Err(anyhow!("Configuration command '{}' failed with exit code: {}", 
-                          config_cmd, status.code().unwrap_or(-1)));
-    }
-    
-    Ok(())
-}
-
-/// Shell command structure
-struct ShellCommand {
-    executable: String,
-    args: Vec<String>,
-}
-
-/// Detect what shell to use based on environment
-fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
-    // First, try to use explicit shell environment variables
-    if let Ok(shell_path) = std::env::var("SHELL") {
-        // User has a SHELL variable defined, use it
-        let shell_name = Path::new(&shell_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("sh");
-            
-        // Check if it's a known shell and use appropriate args
-        if shell_name.contains("bash") || shell_name == "sh" {
-            return Ok(ShellCommand {
-                executable: shell_path,
-                args: vec!["-c".to_string(), cmd.to_string()],
-            });
-        } else if shell_name.contains("zsh") {
-            return Ok(ShellCommand {
-                executable: shell_path,
-                args: vec!["-c".to_string(), cmd.to_string()],
-            });
-        } else if shell_name.contains("fish") {
-            return Ok(ShellCommand {
-                executable: shell_path,
-                args: vec!["-c".to_string(), cmd.to_string()],
-            });
-        }
-    }
-    
-    // Look for Git Bash on Windows
-    if cfg!(windows) {
-        // Check common Git Bash locations
-        let git_bash_locations = [
-            r"C:\Program Files\Git\bin\bash.exe",
-            r"C:\Program Files (x86)\Git\bin\bash.exe",
-        ];
-        
-        for path in git_bash_locations.iter() {
-            if Path::new(path).exists() {
-                return Ok(ShellCommand {
-                    executable: path.to_string(),
-                    args: vec!["-c".to_string(), cmd.to_string()],
-                });
-            }
-        }
-        
-        // Check if bash is in PATH
-        if let Ok(output) = Command::new("where").arg("bash").output() {
-            if output.status.success() && !output.stdout.is_empty() {
-                // Convert stdout to string first to fix the borrowing issue
-                let output_str = String::from_utf8_lossy(&output.stdout).to_string();
-                let bash_path = output_str.lines().next().unwrap_or("bash").trim();
-                
-                return Ok(ShellCommand {
-                    executable: bash_path.to_string(),
-                    args: vec!["-c".to_string(), cmd.to_string()],
-                });
-            }
-        }
-        
-        // If all else fails on Windows, try PowerShell
-        return Ok(ShellCommand {
-            executable: "powershell".to_string(),
-            args: vec!["-Command".to_string(), cmd.to_string()],
-        });
-    }
-    
-    // Default for Unix platforms
-    Ok(ShellCommand {
-        executable: "sh".to_string(),
-        args: vec!["-c".to_string(), cmd.to_string()],
-    })
+    execute_config_cmd(local_path, config)
 }
 
 /// Update the remote URL for a repository
@@ -249,24 +146,7 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     }
     
     // Configure the repository
-    if let Some(config_cmd) = config.get("CONFIG_CMD") {
-        // Use the same shell detection logic we implemented for configure_repo
-        let shell_cmd = detect_shell_command(config_cmd)?;
-        
-        // Execute through the detected shell
-        let status = Command::new(shell_cmd.executable)
-            .args(&shell_cmd.args)
-            .current_dir(local_path)
-            .stdin(std::process::Stdio::inherit())
-            .stdout(std::process::Stdio::inherit())
-            .stderr(std::process::Stdio::inherit())
-            .status()
-            .with_context(|| format!("Failed to execute CONFIG_CMD: {}", config_cmd))?;
-        
-        if !status.success() {
-            return Err(anyhow!("Config command failed with exit code: {:?}", status));
-        }
-    }
+    execute_config_cmd(local_path, config)?;
     
     // Git remote URL
     let git_remote = format!("{}{}", effective_login, grm_rpath);
@@ -331,6 +211,113 @@ pub fn run_git_command(local_path: &str, args_str: &str) -> Result<()> {
     
     if status != 0 {
         return Err(anyhow!("Git command failed with exit code: {}", status));
+    }
+    
+    Ok(())
+}
+
+/// Shell command structure
+struct ShellCommand {
+    executable: String,
+    args: Vec<String>,
+}
+
+/// Detect what shell to use based on environment
+fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
+    // First, try to use explicit shell environment variables
+    if let Ok(shell_path) = std::env::var("SHELL") {
+        // User has a SHELL variable defined, use it
+        let shell_name = Path::new(&shell_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("sh");
+            
+        // Check if it's a known shell and use appropriate args
+        if shell_name.contains("bash") || shell_name == "sh" {
+            return Ok(ShellCommand {
+                executable: shell_path,
+                args: vec!["-c".to_string(), cmd.to_string()],
+            });
+        } else if shell_name.contains("zsh") {
+            return Ok(ShellCommand {
+                executable: shell_path,
+                args: vec!["-c".to_string(), cmd.to_string()],
+            });
+        } else if shell_name.contains("fish") {
+            return Ok(ShellCommand {
+                executable: shell_path,
+                args: vec!["-c".to_string(), cmd.to_string()],
+            });
+        }
+    }
+    
+    // Look for Git Bash on Windows
+    if cfg!(windows) {
+        // Check common Git Bash locations
+        let git_bash_locations = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ];
+        
+        for path in git_bash_locations.iter() {
+            if Path::new(path).exists() {
+                return Ok(ShellCommand {
+                    executable: path.to_string(),
+                    args: vec!["-c".to_string(), cmd.to_string()],
+                });
+            }
+        }
+        
+        // Check if bash is in PATH
+        if let Ok(output) = Command::new("where").arg("bash").output() {
+            if output.status.success() && !output.stdout.is_empty() {
+                // Convert stdout to string first to fix the borrowing issue
+                let output_str = String::from_utf8_lossy(&output.stdout).to_string();
+                let bash_path = output_str.lines().next().unwrap_or("bash").trim();
+                
+                return Ok(ShellCommand {
+                    executable: bash_path.to_string(),
+                    args: vec!["-c".to_string(), cmd.to_string()],
+                });
+            }
+        }
+        
+        // If all else fails on Windows, try PowerShell
+        return Ok(ShellCommand {
+            executable: "powershell".to_string(),
+            args: vec!["-Command".to_string(), cmd.to_string()],
+        });
+    }
+    
+    // Default for Unix platforms
+    Ok(ShellCommand {
+        executable: "sh".to_string(),
+        args: vec!["-c".to_string(), cmd.to_string()],
+    })
+}
+
+/// Execute a CONFIG_CMD in the specified directory
+fn execute_config_cmd(local_path: &str, config: &Config) -> Result<()> {
+    let config_cmd = match config.get("CONFIG_CMD") {
+        Some(cmd) => cmd.clone(),
+        None => return Ok(()),  // Skip if no configure command
+    };
+    
+    // Try to detect the shell environment
+    let shell_cmd = detect_shell_command(&config_cmd)?;
+    
+    // Execute through the detected shell
+    let status = Command::new(shell_cmd.executable)
+        .args(&shell_cmd.args)
+        .current_dir(local_path)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .with_context(|| format!("Failed to execute CONFIG_CMD: {}", config_cmd))?;
+    
+    if !status.success() {
+        return Err(anyhow!("Config command failed with exit code: {:?}", status));
     }
     
     Ok(())
