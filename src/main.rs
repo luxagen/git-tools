@@ -386,15 +386,24 @@ fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
             // Handle escaping characters in remote paths
             let clean_remote_path = normalize_path_for_url(remote_rel_path);
             
-            // Ensure login and base are properly formatted
+            // Trim any trailing slashes from login and base
             let login = login.trim_end_matches('/');
             let base = base.trim_matches('/');
             
-            if login.contains("://") {
-                // Login already has protocol
-                format!("{}//{}/{}", login, base, clean_remote_path)
+            // Construct a standard Git URI
+            if login.is_empty() {
+                // Local path only
+                format!("{}/{}", base, clean_remote_path)
+            } else if login.contains("://") {
+                // Protocol-based URL (http://, https://, ssh://)
+                // Ensure there's exactly one slash after the domain
+                let login_parts: Vec<&str> = login.splitn(2, "://").collect();
+                let protocol = login_parts[0];
+                let domain = login_parts[1].trim_end_matches('/');
+                
+                format!("{}://{}/{}/{}", protocol, domain, base, clean_remote_path)
             } else {
-                // Simple login without protocol
+                // SSH SCP-style syntax (user@host:path)
                 format!("{}:{}/{}", login, base, clean_remote_path)
             }
         },
