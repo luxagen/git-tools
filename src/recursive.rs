@@ -57,6 +57,17 @@ fn recurse_to_subdirectory(path: &Path, config: &Config, mode: &str) -> Result<(
     // Remove any existing GRM_ variables
     child_env.retain(|(key, _)| !key.starts_with("GRM_"));
     
+    // Get relative path for constructing the recurse prefix
+    let current_dir = env::current_dir()?;
+    let path_rel = if let Ok(rel_path) = path.strip_prefix(&current_dir) {
+        rel_path.to_string_lossy().to_string()
+    } else {
+        path.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    
     // Set up new environment with config for the child process
     for (key, value) in config.all_values() {
         if key == "MODE" || key.starts_with("MODE_") {
@@ -66,10 +77,6 @@ fn recurse_to_subdirectory(path: &Path, config: &Config, mode: &str) -> Result<(
         
         // Set GRM_RECURSE_PREFIX to track hierarchy
         if key == "RECURSE_PREFIX" {
-            let path_rel = path.file_name()
-                .and_then(|n| n.to_str())
-                .unwrap_or("");
-                
             let new_prefix = if config.get_recurse_prefix().is_empty() {
                 format!("{}/", path_rel)
             } else {
@@ -82,6 +89,11 @@ fn recurse_to_subdirectory(path: &Path, config: &Config, mode: &str) -> Result<(
         
         // Add GRM_ prefix to all other config variables
         child_env.push((format!("GRM_{}", key), value.clone()));
+    }
+    
+    // Always ensure RECURSE_PREFIX is set, even if it wasn't in the parent config
+    if !child_env.iter().any(|(key, _)| key == "GRM_RECURSE_PREFIX") {
+        child_env.push(("GRM_RECURSE_PREFIX".to_string(), format!("{}/", path_rel)));
     }
     
     // Get path to current executable

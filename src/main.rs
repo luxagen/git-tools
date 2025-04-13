@@ -201,14 +201,17 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 
 /// Process a repository
 fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path: &str) -> Result<()> {
+    // Get the current recurse prefix for path display
+    let recurse_prefix = config.get_recurse_prefix();
+    
     // Different behavior based on mode flags
     if config.get_mode_flag("MODE_LIST_RREL") {
-        println!("{}", remote_path);
+        println!("{}{}", recurse_prefix, remote_path);
         return Ok(());
     }
     
     if config.get_mode_flag("MODE_LIST_LREL") {
-        println!("{}", local_path);
+        println!("{}{}", recurse_prefix, local_path);
         return Ok(());
     }
     
@@ -218,6 +221,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
             _ => remote_path.to_string(),
         };
+        // Don't use prefix for URL - the URL already has the full path included
         println!("{}", remote_url);
         return Ok(());
     }
