@@ -1,5 +1,5 @@
 use clap::ValueEnum;
-use once_cell::sync::Lazy;
+use once_cell::sync::OnceCell;
 
 /// Repository operation modes with explicit permissions and capabilities
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -153,21 +153,20 @@ impl ModeConfig {
 }
 
 /// Global MODE_CONFIG initialized once at startup
-pub static MODE_CONFIG: Lazy<ModeConfig> = Lazy::new(|| {
-    // Default to a safe no-op mode configuration - will be set during initialization
-    ModeConfig::new(PrimaryMode::Configure)
-});
+static MODE_CONFIG: OnceCell<ModeConfig> = OnceCell::new();
 
 /// Initialize the global mode configuration - call this ONCE at startup
 pub fn initialize_mode(primary_mode: PrimaryMode) {
-    // Use once_cell::sync::Lazy to initialize this only once
-    // The initial value will be replaced on first access with the actual mode
+    // Create a new ModeConfig instance from the primary mode
     let mode_config = ModeConfig::new(primary_mode);
     
-    // Safety: This function should only be called once during application startup
-    // before any threads are spawned.
-    unsafe {
-        let ptr = &MODE_CONFIG as *const Lazy<ModeConfig> as *mut Lazy<ModeConfig>;
-        std::ptr::write(ptr, Lazy::new(|| mode_config));
-    }
+    // Initialize the global configuration once
+    // If this fails, it means initialize_mode was called more than once
+    MODE_CONFIG.set(mode_config).expect("MODE_CONFIG already initialized");
+}
+
+/// Get a reference to the mode configuration
+/// Panics if initialize_mode wasn't called first
+pub fn get_mode_config() -> &'static ModeConfig {
+    MODE_CONFIG.get().expect("MODE_CONFIG not initialized")
 }

@@ -3,7 +3,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
-use clap::{Parser, ValueEnum};
+use clap::Parser;
 use std::collections::HashMap;
 use regex::Regex;
 use url::Url;
@@ -13,7 +13,7 @@ mod recursive;
 mod repository;
 mod mode;
 
-use mode::{PrimaryMode, ModeConfig, MODE_CONFIG, initialize_mode};
+use mode::{PrimaryMode, initialize_mode, get_mode_config};
 
 /// Separator character used in .grm.repos files
 const LIST_SEPARATOR: char = '*';
@@ -166,17 +166,17 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     let prefixed_remote_path = format!("{}{}", recurse_prefix, remote_path);
     
     // Different behavior based on mode flags
-    if MODE_CONFIG.get_flag("MODE_LIST_RREL") {
+    if get_mode_config().get_flag("MODE_LIST_RREL") {
         println!("{}", prefixed_remote_path);
         return Ok(());
     }
     
-    if MODE_CONFIG.get_flag("MODE_LIST_LREL") {
+    if get_mode_config().get_flag("MODE_LIST_LREL") {
         println!("{}", prefixed_local_path);
         return Ok(());
     }
     
-    if MODE_CONFIG.get_flag("MODE_LIST_RURL") {
+    if get_mode_config().get_flag("MODE_LIST_RURL") {
         // Construct remote URL using the remote_path (without prefix)
         // since the remote server paths include the full hierarchy
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
@@ -192,9 +192,9 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     // Skip processing for listing modes
-    if MODE_CONFIG.get_flag("MODE_LIST_RREL") || 
-       MODE_CONFIG.get_flag("MODE_LIST_LREL") || 
-       MODE_CONFIG.get_flag("MODE_LIST_RURL") {
+    if get_mode_config().get_flag("MODE_LIST_RREL") || 
+       get_mode_config().get_flag("MODE_LIST_LREL") || 
+       get_mode_config().get_flag("MODE_LIST_RURL") {
         return Ok(());
     }
     
@@ -203,13 +203,13 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Process based on path state
     if !path.exists() {
-        if MODE_CONFIG.get_flag("MODE_NEW") {
+        if get_mode_config().get_flag("MODE_NEW") {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
         
         // Only clone if MODE_CLONE is set
-        if !MODE_CONFIG.get_flag("MODE_CLONE") {
+        if !get_mode_config().get_flag("MODE_CLONE") {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
@@ -240,7 +240,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Check if directory is a git repository
     if repository::is_dir_repo_root(local_path)? {
-        if MODE_CONFIG.get_flag("MODE_NEW") {
+        if get_mode_config().get_flag("MODE_NEW") {
             eprintln!("{} already exists (skipping)", prefixed_local_path);
             return Ok(());
         }
@@ -258,15 +258,15 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
-        if MODE_CONFIG.get_flag("MODE_SET_REMOTE") {
+        if get_mode_config().get_flag("MODE_SET_REMOTE") {
             repository::set_remote(local_path, &remote_url)?;
         }
         
-        if MODE_CONFIG.get_flag("MODE_CONFIGURE") {
+        if get_mode_config().get_flag("MODE_CONFIGURE") {
             repository::configure_repo(local_path, media_path, config)?;
         }
         
-        if MODE_CONFIG.get_flag("MODE_GIT") {
+        if get_mode_config().get_flag("MODE_GIT") {
             // Execute git commands in the repository
             if let Some(git_args) = config.get("GIT_ARGS") {
                 repository::run_git_command(local_path, git_args)?;
@@ -277,7 +277,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     // Handle non-repo directories
-    if !MODE_CONFIG.get_flag("MODE_NEW") {
+    if !get_mode_config().get_flag("MODE_NEW") {
         eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
         return Ok(());
     }
@@ -372,7 +372,7 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
         let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
         
-        if MODE_CONFIG.get_flag("MODE_DEBUG") {
+        if get_mode_config().get_flag("MODE_DEBUG") {
             eprintln!("Potential target: {}", local_path);
         }
         

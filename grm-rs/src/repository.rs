@@ -1,4 +1,3 @@
-use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::process::Command;
@@ -95,14 +94,14 @@ pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> 
 }
 
 /// Configure a repository using the provided command
-pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
+pub fn configure_repo(local_path: &str, _media_path: &str, config: &Config) -> Result<()> {
     execute_config_cmd(local_path, config)
 }
 
 /// Update the remote URL for a repository
 pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
     // Try to update the remote first
-    let mut git_args = vec!["remote", "set-url", "origin", remote_url];
+    let git_args = vec!["remote", "set-url", "origin", remote_url];
     let mut cmd_args = vec!["git"];
     cmd_args.extend(git_args);
     
