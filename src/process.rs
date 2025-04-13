@@ -41,8 +41,6 @@ pub fn run_in_dir(dir: &str, args: &[&str]) -> Result<i32> {
         return Err(anyhow!("No command specified"));
     }
     
-    eprintln!("Executing in {}: {:?}", dir, args);
-    
     let program = args[0];
     let arguments = &args[1..];
     
