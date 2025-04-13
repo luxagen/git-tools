@@ -398,15 +398,18 @@ fn main() -> Result<()> {
     let list_dir = find_listfile_dir(&config)?;
     env::set_current_dir(&list_dir)?;
     
-    // Process the listfile
-    let list_fn = config.get("LIST_FN")
-        .ok_or_else(|| anyhow!("LIST_FN not set in configuration"))?;
+    // Get the listfile name and check it exists before processing
+    let list_fn = match config.get("LIST_FN") {
+        Some(name) => name.clone(),
+        None => return Err(anyhow!("LIST_FN not set in configuration")),
+    };
     
-    let listfile = Path::new(list_fn);
+    let listfile = Path::new(&list_fn);
     if !listfile.exists() {
         return Err(anyhow!("Listfile {} not found", listfile.display()));
     }
     
+    // Process the listfile
     process_listfile(&mut config, listfile)?;
     
     // Recursively process subdirectories if enabled
