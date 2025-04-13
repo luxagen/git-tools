@@ -1,3 +1,6 @@
+#![allow(dead_code)]
+#![allow(unused_imports)]
+
 use std::env;
 use std::fs::File;
 use std::io::{BufRead, BufReader};
