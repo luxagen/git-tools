@@ -42,27 +42,110 @@ pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> 
 
 /// Configure a repository using the provided command
 pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
-    println!("Configuring repository at {} with media path {}", local_path, media_path);
-    
     let config_cmd = match config.get("CONFIG_CMD") {
         Some(cmd) => cmd.clone(),
         None => return Ok(()),  // Skip if no configure command
     };
     
-    // Split config command into args
-    let args: Vec<&str> = config_cmd.split_whitespace().collect();
+    // Try to detect the shell environment
+    let shell_cmd = detect_shell_command(&config_cmd)?;
     
-    if args.is_empty() {
-        return Ok(());
-    }
+    // Execute through the detected shell
+    let status = Command::new(shell_cmd.executable)
+        .args(&shell_cmd.args)
+        .current_dir(local_path)
+        .stdin(std::process::Stdio::inherit())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .with_context(|| format!("Failed to execute config command in {}: {}", local_path, config_cmd))?;
     
-    let status = process::run_in_dir(local_path, &args)?;
-    
-    if status != 0 {
-        return Err(anyhow!("Failed to configure repository with exit code: {}", status));
+    if !status.success() {
+        return Err(anyhow!("Configuration command '{}' failed with exit code: {}", 
+                          config_cmd, status.code().unwrap_or(-1)));
     }
     
     Ok(())
+}
+
+/// Shell command structure
+struct ShellCommand {
+    executable: String,
+    args: Vec<String>,
+}
+
+/// Detect what shell to use based on environment
+fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
+    // First, try to use explicit shell environment variables
+    if let Ok(shell_path) = std::env::var("SHELL") {
+        // User has a SHELL variable defined, use it
+        let shell_name = Path::new(&shell_path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("sh");
+            
+        // Check if it's a known shell and use appropriate args
+        if shell_name.contains("bash") || shell_name == "sh" {
+            return Ok(ShellCommand {
+                executable: shell_path,
+                args: vec!["-c".to_string(), cmd.to_string()],
+            });
+        } else if shell_name.contains("zsh") {
+            return Ok(ShellCommand {
+                executable: shell_path,
+                args: vec!["-c".to_string(), cmd.to_string()],
+            });
+        } else if shell_name.contains("fish") {
+            return Ok(ShellCommand {
+                executable: shell_path,
+                args: vec!["-c".to_string(), cmd.to_string()],
+            });
+        }
+    }
+    
+    // Look for Git Bash on Windows
+    if cfg!(windows) {
+        // Check common Git Bash locations
+        let git_bash_locations = [
+            r"C:\Program Files\Git\bin\bash.exe",
+            r"C:\Program Files (x86)\Git\bin\bash.exe",
+        ];
+        
+        for path in git_bash_locations.iter() {
+            if Path::new(path).exists() {
+                return Ok(ShellCommand {
+                    executable: path.to_string(),
+                    args: vec!["-c".to_string(), cmd.to_string()],
+                });
+            }
+        }
+        
+        // Check if bash is in PATH
+        if let Ok(output) = Command::new("where").arg("bash").output() {
+            if output.status.success() && !output.stdout.is_empty() {
+                // Convert stdout to string first to fix the borrowing issue
+                let output_str = String::from_utf8_lossy(&output.stdout).to_string();
+                let bash_path = output_str.lines().next().unwrap_or("bash").trim();
+                
+                return Ok(ShellCommand {
+                    executable: bash_path.to_string(),
+                    args: vec!["-c".to_string(), cmd.to_string()],
+                });
+            }
+        }
+        
+        // If all else fails on Windows, try PowerShell
+        return Ok(ShellCommand {
+            executable: "powershell".to_string(),
+            args: vec!["-Command".to_string(), cmd.to_string()],
+        });
+    }
+    
+    // Default for Unix platforms
+    Ok(ShellCommand {
+        executable: "sh".to_string(),
+        args: vec!["-c".to_string(), cmd.to_string()],
+    })
 }
 
 /// Update the remote URL for a repository
