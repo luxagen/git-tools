@@ -138,7 +138,15 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     // Check if directory is a git repository
-    if repository::is_dir_repo_root(local_path)? {
+    let is_repo = match repository::is_dir_repo_root(local_path) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Error checking if {} is a Git repository: {}", local_path, err);
+            return Ok(());
+        }
+    };
+    
+    if is_repo {
         if operations.new {
             eprintln!("{} already exists (skipping)", prefixed_local_path);
             return Ok(());
@@ -411,7 +419,18 @@ fn main() -> Result<()> {
     
     // Process listfile
     if list_path.exists() {
-        process_listfile(&mut config, &list_path)?;
+        if let Err(err) = process_listfile(&mut config, &list_path) {
+            eprintln!("Error processing listfile: {}", err);
+        }
+        
+        // Process subdirectories if recursion is enabled
+        let operations = get_operations();
+        if operations.recurse {
+            let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+            if let Err(err) = recursive::recurse_listfiles(&current_dir, &config, &args.mode.to_string()) {
+                eprintln!("Error during recursion: {}", err);
+            }
+        }
     } else {
         eprintln!("No .grm.repos file found");
     }
