@@ -339,7 +339,6 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     let gm_dir = config.gm_dir.as_deref().unwrap_or("");
     
     // Construct full paths
-    let remote_path = cat_path(&[remote_dir, &remote_rel_unescaped]);
     let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
     let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
     
@@ -348,7 +347,7 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &local_path, &remote_path, &media_path) {
+    if let Err(err) = process_repo(config, &local_path, &remote_rel_unescaped, &media_path) {
         eprintln!("Error processing {}: {}", local_path, err);
     }
     

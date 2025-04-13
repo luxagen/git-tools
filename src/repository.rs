@@ -100,13 +100,9 @@ pub fn configure_repo(local_path: &str, _media_path: &str, config: &Config) -> R
 
 /// Update the remote URL for a repository
 pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
-    // Try to update the remote first
-    let git_args = vec!["remote", "set-url", "origin", remote_url];
-    let mut cmd_args = vec!["git"];
-    cmd_args.extend(git_args);
-    
-    // We handle status manually here because we want to try adding if updating fails
-    let status = process::run_in_dir(local_path, &cmd_args)?;
+    // Try to update the remote first, suppressing output
+    // We use run_git_cmd_silent to avoid printing errors if this fails
+    let status = process::run_command_silent(local_path, &["git", "remote", "set-url", "origin", remote_url])?;
     
     // If remote update failed with exit code 2 (non-existent remote), try to add it
     // This matches the Perl version's check for 512 (which is 2 << 8 in Perl's exit code handling)

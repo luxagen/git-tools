@@ -109,3 +109,30 @@ pub fn capture_command_output(args: &[&str]) -> Result<String> {
     
     Ok(stdout.trim().to_string())
 }
+
+/// Run a command in a specific directory, capturing output but not displaying it
+/// Returns the exit code
+pub fn run_command_silent(dir: &str, args: &[&str]) -> Result<i32> {
+    // Early validation
+    if args.is_empty() {
+        return Err(anyhow!("No command specified"));
+    }
+    
+    let program = args[0];
+    let arguments = &args[1..];
+    
+    // Build and execute the command
+    let output = Command::new(program)
+        .args(arguments)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .output()
+        .with_context(|| format!("Failed to execute command: {:?}", args))?;
+    
+    // Get exit code, which is None if process was terminated by a signal
+    let exit_code = output.status.code().unwrap_or(-1);
+    
+    Ok(exit_code)
+}
