@@ -67,6 +67,7 @@ impl std::fmt::Display for Mode {
 }
 
 /// Config structure to hold GRM configuration
+#[derive(Clone)]
 struct Config {
     /// Configuration loaded from files and environment
     values: HashMap<String, String>,
@@ -317,10 +318,24 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         return Ok(());
     }
     
-    // New mode for existing directory
-    eprintln!("Creating new Git repository in {}", prefixed_local_path);
-    repository::create_new(local_path, remote_path, config)?;
-    eprintln!("{} created", prefixed_local_path);
+    // Check if this path is already listed in a .grm.repos file
+    // If it is, we should never try to create a new repository for it
+    let repo_id = config.get("REPO_ID");
+    if repo_id.is_some() {
+        eprintln!("{} already exists (skipping)", prefixed_local_path);
+        return Ok(());
+    }
+    
+    // Only create a repository if the directory exists
+    if path.exists() {
+        // New mode for existing directory
+        eprintln!("Creating new Git repository in {}", prefixed_local_path);
+        repository::create_new(local_path, remote_path, config)?;
+        eprintln!("{} created", prefixed_local_path);
+    } else {
+        // Directory doesn't exist, just skip it
+        eprintln!("{} does not exist (skipping)", prefixed_local_path);
+    }
     
     Ok(())
 }
@@ -399,8 +414,14 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
             continue;
         }
         
-        // Process the repository
-        if let Err(e) = process_repo(config, &local_path, &remote_path, &media_path) {
+        // Save a temporary copy of the config
+        let mut repo_config = config.clone();
+        
+        // Set REPO_ID to mark this as a listed repository
+        repo_config.set("REPO_ID".to_string(), local_rel.to_string());
+        
+        // Process the repository with the repository-specific config
+        if let Err(e) = process_repo(&repo_config, &local_path, &remote_path, &media_path) {
             eprintln!("Error processing repository: {}", e);
         }
     }
