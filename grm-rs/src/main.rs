@@ -12,8 +12,10 @@ mod process;
 mod recursive;
 mod repository;
 mod mode;
+mod config;
 
 use mode::{PrimaryMode, initialize_mode, get_mode_config};
+use config::Config;
 
 /// Separator character used in .grm.repos files
 const LIST_SEPARATOR: char = '*';
@@ -31,112 +33,6 @@ struct Args {
     args: Vec<String>,
 }
 
-/// Config structure to hold GRM configuration
-#[derive(Clone)]
-pub struct Config {
-    /// Configuration loaded from files and environment
-    values: HashMap<String, String>,
-    /// Path to current execution
-    recurse_prefix: String,
-}
-
-impl Config {
-    /// Create a new configuration
-    fn new() -> Self {
-        let mut config = Config {
-            values: HashMap::new(),
-            recurse_prefix: String::new(),
-        };
-
-        // Set defaults
-        config.values.insert("CONFIG_FILENAME".to_string(), ".grm.conf".to_string());
-        config.values.insert("LIST_FN".to_string(), ".grm.repos".to_string());
-        config.values.insert("OPT_RECURSE".to_string(), "1".to_string());
-        
-        // Load environment variables
-        for (key, value) in env::vars() {
-            if key.starts_with("GRM_") {
-                let config_key = &key[4..]; // Remove GRM_ prefix
-                config.values.insert(config_key.to_string(), value);
-                
-                // Special case for recurse prefix
-                if config_key == "RECURSE_PREFIX" {
-                    config.recurse_prefix = config.values.get(config_key).unwrap().clone();
-                }
-            }
-        }
-
-        config
-    }
-
-    /// Get a configuration value
-    pub fn get(&self, key: &str) -> Option<&String> {
-        self.values.get(key)
-    }
-
-    /// Set a configuration value
-    fn set(&mut self, key: String, value: String) {
-        self.values.insert(key, value);
-    }
-
-    /// Get a boolean flag
-    fn get_flag(&self, key: &str) -> bool {
-        match self.values.get(key) {
-            Some(value) => !value.is_empty(),
-            None => false,
-        }
-    }
-    
-    /// Get the current recurse prefix
-    fn get_recurse_prefix(&self) -> &str {
-        &self.recurse_prefix
-    }
-    
-    /// Get all configuration values
-    fn all_values(&self) -> Vec<(String, String)> {
-        self.values.iter()
-            .map(|(k, v)| (k.clone(), v.clone()))
-            .collect()
-    }
-
-    /// Load configuration from a file
-    fn load_from_file(&mut self, path: &Path) -> Result<()> {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open config file: {}", path.display()))?;
-        
-        let reader = BufReader::new(file);
-        for line in reader.lines() {
-            let line = line?;
-            if let Some((key, value)) = parse_config_line(&line) {
-                self.values.insert(key, value);
-            }
-        }
-        
-        Ok(())
-    }
-}
-
-/// Parse a configuration line
-fn parse_config_line(line: &str) -> Option<(String, String)> {
-    // Skip comments and empty lines
-    let line = line.trim();
-    if line.is_empty() || line.starts_with('#') {
-        return None;
-    }
-    
-    // Config format is expected to be: * KEY * VALUE
-    let parts: Vec<&str> = line.split('*').collect();
-    if parts.len() >= 3 {
-        let key = parts[1].trim().to_string();
-        let value = parts[2].trim().to_string();
-        if !key.is_empty() {
-            return Some((key, value));
-        }
-    }
-    
-    None
-}
-
 /// Find the nearest configuration file by walking up directories
 fn find_conf_file(config: &Config) -> Result<PathBuf> {
     let config_filename = config.get("CONFIG_FILENAME")
@@ -151,9 +47,11 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
         }
         
         if !current_dir.pop() {
-            return Err(anyhow!("Could not find configuration file {}", config_filename));
+            break;
         }
     }
+    
+    Err(anyhow!("Configuration file not found"))
 }
 
 /// Process a repository
