@@ -204,28 +204,28 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     // Get the current recurse prefix for path display
     let recurse_prefix = config.get_recurse_prefix();
     
-    // Create prefixed paths for display
-    let display_local_path = format!("{}{}", recurse_prefix, local_path);
-    let display_remote_path = format!("{}{}", recurse_prefix, remote_path);
+    // Create prefixed paths 
+    let prefixed_local_path = format!("{}{}", recurse_prefix, local_path);
+    let prefixed_remote_path = format!("{}{}", recurse_prefix, remote_path);
     
     // Different behavior based on mode flags
     if config.get_mode_flag("MODE_LIST_RREL") {
-        println!("{}", display_remote_path);
+        println!("{}", prefixed_remote_path);
         return Ok(());
     }
     
     if config.get_mode_flag("MODE_LIST_LREL") {
-        println!("{}", display_local_path);
+        println!("{}", prefixed_local_path);
         return Ok(());
     }
     
     if config.get_mode_flag("MODE_LIST_RURL") {
-        // Construct remote URL
+        // Construct remote URL using the remote_path (without prefix)
+        // since the remote server paths include the full hierarchy
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
             (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
             _ => remote_path.to_string(),
         };
-        // Don't use prefix for URL - the URL already has the full path included
         println!("{}", remote_url);
         return Ok(());
     }
@@ -243,13 +243,13 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     // Process based on path state
     if !path.exists() {
         if config.get_mode_flag("MODE_NEW") {
-            eprintln!("ERROR: {} does not exist", display_local_path);
+            eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
         
         // Only clone if MODE_CLONE is set
         if !config.get_mode_flag("MODE_CLONE") {
-            eprintln!("ERROR: {} does not exist", display_local_path);
+            eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
         
@@ -269,14 +269,14 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Check if path is a directory
     if !path.is_dir() {
-        eprintln!("ERROR: {} is not a directory", display_local_path);
+        eprintln!("ERROR: {} is not a directory", prefixed_local_path);
         return Ok(());
     }
     
     // Check if directory is a git repository
     if repository::is_dir_repo_root(local_path)? {
         if config.get_mode_flag("MODE_NEW") {
-            eprintln!("{} already exists (skipping)", display_local_path);
+            eprintln!("{} already exists (skipping)", prefixed_local_path);
             return Ok(());
         }
         
@@ -286,7 +286,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             _ => remote_path.to_string(),
         };
         
-        eprintln!("{} exists", display_local_path);
+        eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
         if config.get_mode_flag("MODE_SET_REMOTE") {
@@ -307,14 +307,14 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Handle non-repo directories
     if !config.get_mode_flag("MODE_NEW") {
-        eprintln!("ERROR: {} is not a Git repository", display_local_path);
+        eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
         return Ok(());
     }
     
     // New mode for existing directory
-    eprintln!("Creating new Git repository in {}", display_local_path);
+    eprintln!("Creating new Git repository in {}", prefixed_local_path);
     repository::create_new(local_path, remote_path, config)?;
-    eprintln!("{} created", display_local_path);
+    eprintln!("{} created", prefixed_local_path);
     
     Ok(())
 }
