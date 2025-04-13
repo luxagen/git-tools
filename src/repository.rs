@@ -1,4 +1,5 @@
 use std::fs;
+use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 use anyhow::{Context, Result, anyhow};
@@ -212,7 +213,8 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     }
     
     // Prompt for confirmation
-    println!("About to create remote repo '{}'; are you sure? (y/n)", grm_rpath);
+    print!("About to create remote repo '{}'; are you sure? (y/n) ", grm_rpath);
+    std::io::stdout().flush()?;
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
     
