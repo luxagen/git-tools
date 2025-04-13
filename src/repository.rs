@@ -250,13 +250,21 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     
     // Configure the repository
     if let Some(config_cmd) = config.get("CONFIG_CMD") {
-        let args: Vec<&str> = config_cmd.split_whitespace().collect();
+        // Use the same shell detection logic we implemented for configure_repo
+        let shell_cmd = detect_shell_command(config_cmd)?;
         
-        if !args.is_empty() {
-            let status = process::run_in_dir(local_path, &args)?;
-            if status != 0 {
-                return Err(anyhow!("Config command failed with exit code: {}", status));
-            }
+        // Execute through the detected shell
+        let status = Command::new(shell_cmd.executable)
+            .args(&shell_cmd.args)
+            .current_dir(local_path)
+            .stdin(std::process::Stdio::inherit())
+            .stdout(std::process::Stdio::inherit())
+            .stderr(std::process::Stdio::inherit())
+            .status()
+            .with_context(|| format!("Failed to execute CONFIG_CMD: {}", config_cmd))?;
+        
+        if !status.success() {
+            return Err(anyhow!("Config command failed with exit code: {:?}", status));
         }
     }
     
