@@ -94,8 +94,8 @@ pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> 
 }
 
 /// Configure a repository using the provided command
-pub fn configure_repo(local_path: &str, _media_path: &str, config: &Config) -> Result<()> {
-    execute_config_cmd(local_path, config)
+pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
+    execute_config_cmd(local_path, media_path, config)
 }
 
 /// Update the remote URL for a repository
@@ -203,13 +203,16 @@ pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> R
     // Initialize git repository
     init_git_repository(local_path)?;
     
+    // Use the helper function to generate the media path
+    let media_path = crate::get_media_repo_path(config, remote_rel_path);
+    
     // Configure the repository
-    execute_config_cmd(local_path, config)?;
+    execute_config_cmd(local_path, &media_path, config)?;
     
     // Git remote URL
     let git_remote = format!("{}{}", effective_login, grm_rpath);
     
-    // Set the repository remote
+    // Add the remote
     add_git_remote(local_path, &git_remote)?;
     
     // Checkout master if this was a new repository
@@ -311,14 +314,17 @@ fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
 }
 
 /// Execute a CONFIG_CMD in the specified directory
-fn execute_config_cmd(local_path: &str, config: &Config) -> Result<()> {
+fn execute_config_cmd(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
     let config_cmd = match &config.config_cmd {
         Some(cmd) if !cmd.is_empty() => cmd,
         _ => return Ok(()), // No command to execute
     };
     
+    // Append the media_path to the config command as a command-line argument
+    let full_command = format!("{} {}", config_cmd, media_path);
+    
     // Try to detect the shell environment
-    let shell_cmd = detect_shell_command(config_cmd)?;
+    let shell_cmd = detect_shell_command(&full_command)?;
     
     // Execute through the detected shell
     let status = Command::new(shell_cmd.executable)
@@ -328,7 +334,7 @@ fn execute_config_cmd(local_path: &str, config: &Config) -> Result<()> {
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
         .status()
-        .with_context(|| format!("Failed to execute CONFIG_CMD: {}", config_cmd))?;
+        .with_context(|| format!("Failed to execute CONFIG_CMD: {}", full_command))?;
     
     if !status.success() {
         return Err(anyhow!("Config command failed with exit code: {:?}", status));
