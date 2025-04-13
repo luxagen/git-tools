@@ -282,7 +282,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             _ => remote_path.to_string(),
         };
         
-        eprintln!("{} exists", local_path);
+        eprintln!("{}{} exists", recurse_prefix, local_path);
         
         // Update remote and configure
         if config.get_mode_flag("MODE_SET_REMOTE") {
@@ -308,9 +308,9 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     // New mode for existing directory
-    eprintln!("Creating new Git repository in {}", local_path);
+    eprintln!("Creating new Git repository in {}{}", recurse_prefix, local_path);
     repository::create_new(local_path, remote_path, config)?;
-    eprintln!("{} created", local_path);
+    eprintln!("{}{} created", recurse_prefix, local_path);
     
     Ok(())
 }
