@@ -403,6 +403,9 @@ fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
 }
 
 fn main() -> Result<()> {
+    // Set MSYS_NO_PATHCONV=1 to prevent Windows Git path conversion issues
+    std::env::set_var("MSYS_NO_PATHCONV", "1");
+    
     // Parse command line arguments
     let args = Args::parse();
     
