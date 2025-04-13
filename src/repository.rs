@@ -144,13 +144,16 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_path);
     
     // Check required configuration
-    let rpath_template = config.get("RPATH_TEMPLATE")
+    let rpath_template = config.rpath_template
+        .as_ref()
         .ok_or_else(|| anyhow!("RPATH_TEMPLATE not set in configuration"))?;
     
-    let rlogin = config.get("RLOGIN")
+    let rlogin = config.rlogin
+        .as_ref()
         .ok_or_else(|| anyhow!("RLOGIN not set in configuration"))?;
     
-    let rpath_base = config.get("RPATH_BASE")
+    let rpath_base = config.rpath_base
+        .as_ref()
         .ok_or_else(|| anyhow!("RPATH_BASE not set in configuration"))?;
     
     // Parse SSH host
@@ -313,13 +316,13 @@ fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
 
 /// Execute a CONFIG_CMD in the specified directory
 fn execute_config_cmd(local_path: &str, config: &Config) -> Result<()> {
-    let config_cmd = match config.get("CONFIG_CMD") {
-        Some(cmd) => cmd.clone(),
-        None => return Ok(()),  // Skip if no configure command
+    let config_cmd = match &config.config_cmd {
+        Some(cmd) if !cmd.is_empty() => cmd,
+        _ => return Ok(()), // No command to execute
     };
     
     // Try to detect the shell environment
-    let shell_cmd = detect_shell_command(&config_cmd)?;
+    let shell_cmd = detect_shell_command(config_cmd)?;
     
     // Execute through the detected shell
     let status = Command::new(shell_cmd.executable)

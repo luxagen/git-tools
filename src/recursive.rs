@@ -29,10 +29,7 @@ pub fn recurse_listfiles(dir: &Path, config: &Config, mode: &str) -> Result<()> 
             continue;
         }
         
-        let list_file = config.get("LIST_FN")
-            .ok_or_else(|| anyhow!("LIST_FN not set in configuration"))?;
-            
-        let list_file_path = path.join(list_file);
+        let list_file_path = path.join(&config.list_filename);
         
         if list_file_path.exists() {
             // Recurse by spawning a new process
@@ -77,10 +74,10 @@ fn recurse_to_subdirectory(path: &Path, config: &Config, mode: &str) -> Result<(
         
         // Set GRM_RECURSE_PREFIX to track hierarchy
         if key == "RECURSE_PREFIX" {
-            let new_prefix = if config.get_recurse_prefix().is_empty() {
+            let new_prefix = if config.recurse_prefix.is_empty() {
                 format!("{}/", path_rel)
             } else {
-                format!("{}{}/", config.get_recurse_prefix(), path_rel)
+                format!("{}{}/", config.recurse_prefix, path_rel)
             };
             
             child_env.push((format!("GRM_{}", key), new_prefix));
