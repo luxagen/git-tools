@@ -306,3 +306,22 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     println!("Repository created successfully");
     Ok(())
 }
+
+/// Run a git command in the repository
+pub fn run_git_command(local_path: &str, args_str: &str) -> Result<()> {
+    // Split the arguments string into individual arguments
+    let args: Vec<&str> = args_str.split_whitespace().collect();
+    
+    // Construct the full command: git + args
+    let mut cmd_args = vec!["git"];
+    cmd_args.extend(args);
+    
+    // Run the git command in the repository directory
+    let status = process::run_in_dir(local_path, &cmd_args)?;
+    
+    if status != 0 {
+        return Err(anyhow!("Git command failed with exit code: {}", status));
+    }
+    
+    Ok(())
+}
