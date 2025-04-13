@@ -136,8 +136,8 @@ fn add_git_remote(local_path: &str, remote_url: &str) -> Result<()> {
 }
 
 /// Create a new repository 
-pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Result<()> {
-    println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_path);
+pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> Result<()> {
+    println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_rel_path);
     
     // Check required configuration
     let rpath_template = config.rpath_template
@@ -165,7 +165,7 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     let virgin = !Path::new(local_path).join(".git").exists();
     
     // Construct remote path with .git extension
-    let mut grm_rpath = format!("{}/{}", rpath_base, remote_path);
+    let mut grm_rpath = format!("{}/{}", rpath_base, remote_rel_path);
     if !grm_rpath.ends_with(".git") {
         grm_rpath.push_str(".git");
     }
