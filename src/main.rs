@@ -2,7 +2,7 @@
 #![allow(unused_imports)]
 
 use std::env;
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
@@ -239,15 +239,12 @@ fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
 /// Get the current mode string
 fn get_mode_string() -> String {
     let operations = get_operations();
-    if operations.list_local { return "list-local".to_string(); }
-    if operations.list_remote { return "list-remote".to_string(); }
     if operations.list_lrel { return "list-lrel".to_string(); }
     if operations.list_rrel { return "list-rrel".to_string(); }
     if operations.list_rurl { return "list-rurl".to_string(); }
     if operations.clone { return "clone".to_string(); }
     if operations.configure { return "configure".to_string(); }
     if operations.set_remote { return "set-remote".to_string(); }
-    if operations.set_branch { return "set-branch".to_string(); }
     if operations.git { return "git".to_string(); }
     if operations.new { return "new".to_string(); }
     "status".to_string() // default
@@ -255,19 +252,40 @@ fn get_mode_string() -> String {
 
 /// Process a repository line from a listfile
 fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
+    // Process line to extract fields
+    let fields = split_with_escapes(line, LIST_SEPARATOR);
+    
+    // Skip comments and empty lines (should not reach here, as this is handled in the caller)
+    if fields.is_empty() || fields[0].starts_with('#') || fields[0].trim().is_empty() {
+        return Ok(());
+    }
+    
+    // Handle config lines (no remote rel path)
+    if fields.len() >= 2 && (fields[0].is_empty() || fields[0].trim().is_empty()) {
+        // This is a config line
+        if fields.len() >= 3 {
+            // Format: * KEY * VALUE
+            let key = fields[1].trim().to_string();
+            let value = fields[2].trim().to_string();
+            config.set_from_string(key, value);
+        }
+        return Ok(());
+    }
+    
+    // Get repository paths from fields
+    let remote_rel_raw = &fields[0];
+    let local_rel_raw = if fields.len() > 1 { &fields[1] } else { "" };
+    let gm_rel_raw = if fields.len() > 2 { &fields[2] } else { "" };
+    
     // Extract repo name from remote path for default values
     let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-    let repo_name = match re.captures(line) {
+    let repo_name = match re.captures(remote_rel_raw) {
         Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
         None => "",
     };
     
-    // Get remaining path parts
-    let local_rel_raw = "";
-    let gm_rel_raw = "";
-    
     // Unescape all paths - do this once and store as String
-    let remote_rel_unescaped = unescape_backslashes(line);
+    let remote_rel_unescaped = unescape_backslashes(remote_rel_raw);
     
     // Apply defaults and unescape
     let local_rel_unescaped = if local_rel_raw.is_empty() {
