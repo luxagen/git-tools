@@ -307,8 +307,6 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
 
 /// Process a listfile (similar to listfile_process in Perl)
 fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
-    eprintln!("Processing listfile: {}", path.display());
-    
     let file = File::open(path)
         .with_context(|| format!("Failed to open listfile: {}", path.display()))?;
     
