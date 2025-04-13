@@ -12,6 +12,9 @@ mod process;
 mod recursive;
 mod repository;
 
+/// Separator character used in .grm.repos files
+const LIST_SEPARATOR: char = '*';
+
 /// Git Repository Manager - Rust implementation
 #[derive(Parser, Debug)]
 #[clap(author, version, about)]
@@ -364,74 +367,103 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         }
         
         // Parse the line using the separator character (*)
-        let separator = "*";
-        let parts: Vec<&str> = line.split(separator).collect();
+        let separator = LIST_SEPARATOR;
+        let parts = split_with_escapes(line, separator);
         if parts.len() < 1 {
             continue;
         }
         
-        let remote_rel = parts[0].trim();
-        if remote_rel.is_empty() {
+        // Get the raw paths from the listfile
+        let remote_rel_raw = parts[0].clone();
+        
+        if remote_rel_raw.is_empty() {
             // This is a configuration line
             if parts.len() >= 3 {
-                let key = parts[1].trim();
-                let value = parts[2].trim();
+                let key = parts[1].clone();
+                let value = parts[2].clone();
                 if !key.is_empty() {
-                    config.set(key.to_string(), value.to_string());
+                    config.set(key, value);
                 }
             }
             continue;
         }
         
-        let local_rel = if parts.len() >= 2 { parts[1].trim() } else { "" };
-        let gm_rel = if parts.len() >= 3 { parts[2].trim() } else { "" };
-        
         // Extract repo name from remote path for default values
         let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-        let repo_name = match re.captures(remote_rel) {
+        let repo_name = match re.captures(&remote_rel_raw) {
             Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
             None => "",
         };
         
-        let local_rel = if local_rel.is_empty() { repo_name } else { local_rel };
-        let gm_rel = if gm_rel.is_empty() { repo_name } else { gm_rel };
+        // Get remaining path parts
+        let local_rel_raw = if parts.len() >= 2 { parts[1].clone() } else { String::new() };
+        let gm_rel_raw = if parts.len() >= 3 { parts[2].clone() } else { String::new() };
+        
+        // Unescape all paths - do this once and store as String
+        let remote_rel_unescaped = unescape_backslashes(&remote_rel_raw);
+        
+        // Apply defaults and unescape
+        let local_rel_unescaped = if local_rel_raw.is_empty() {
+            repo_name.to_string()
+        } else {
+            unescape_backslashes(&local_rel_raw)
+        };
+        
+        let gm_rel_unescaped = if gm_rel_raw.is_empty() {
+            repo_name.to_string()
+        } else {
+            unescape_backslashes(&gm_rel_raw)
+        };
         
         // Construct full paths
         let remote_dir = config.get("REMOTE_DIR").map(|s| s.as_str()).unwrap_or("");
         let local_dir = config.get("LOCAL_DIR").map(|s| s.as_str()).unwrap_or("");
         let gm_dir = config.get("GM_DIR").map(|s| s.as_str()).unwrap_or("");
         
-        let remote_path = cat_path(&[remote_dir, remote_rel]);
-        let local_path = cat_path(&[local_dir, local_rel]);
-        let media_path = cat_path(&[gm_dir, gm_rel]);
+        let remote_path = cat_path(&[remote_dir, &remote_rel_unescaped]);
+        let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
+        let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
         
-        // Get the current directory for filtering
-        let current_dir = env::current_dir()?;
-        let tree_filter = current_dir.to_string_lossy().to_string();
-        
-        // Skip repositories outside the current tree
-        let full_local_path = Path::new(&local_path);
-        let is_in_tree = if full_local_path.is_absolute() {
-            full_local_path.to_string_lossy().contains(&tree_filter)
-        } else {
-            let full_path = current_dir.join(&local_path);
-            full_path.starts_with(&tree_filter)
-        };
-        
-        if !is_in_tree {
-            continue;
+        if config.get_mode_flag("MODE_DEBUG") {
+            eprintln!("Potential target: {}", local_path);
         }
         
-        // Save a temporary copy of the config
-        let mut repo_config = config.clone();
-        
-        // Process the repository with the repository-specific config
-        if let Err(e) = process_repo(&repo_config, &local_path, &remote_path, &media_path) {
-            eprintln!("Error processing repository: {}", e);
-        }
+        // Process the repository
+        process_repo(config, &local_path, &remote_path, &media_path)?;
     }
     
     Ok(())
+}
+
+/// Split a line by separator character, respecting escaped separators
+fn split_with_escapes(line: &str, separator: char) -> Vec<String> {
+    let mut result = Vec::new();
+    let mut current = String::new();
+    let mut chars = line.chars();
+    
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            // Backslash found - get the next character and treat it literally
+            if let Some(next_char) = chars.next() {
+                current.push(next_char);
+            } else {
+                // Handle trailing backslash at end of line
+                current.push('\\');
+            }
+        } else if c == separator {
+            // Unescaped separator - add current part to result and start a new one
+            result.push(current.trim().to_string());
+            current = String::new();
+        } else {
+            // Regular character, just add it
+            current.push(c);
+        }
+    }
+    
+    // Add the last part
+    result.push(current.trim().to_string());
+    
+    result
 }
 
 /// Concatenate path segments
@@ -457,34 +489,35 @@ fn cat_path(pieces: &[&str]) -> String {
 
 /// Clean and normalize a path for remote URL construction
 fn normalize_path_for_url(path: &str) -> String {
-    // Single-pass handling of backslash escapes to reduce allocations
-    let mut unescaped = String::with_capacity(path.len());
-    let mut chars = path.chars().peekable();
-    
-    while let Some(c) = chars.next() {
-        if c == '\\' && chars.peek().is_some() {
-            match chars.peek() {
-                Some('\'') => { unescaped.push('\''); chars.next(); },
-                Some('\"') => { unescaped.push('\"'); chars.next(); },
-                Some('$') => { unescaped.push('$'); chars.next(); },
-                Some('`') => { unescaped.push('`'); chars.next(); },
-                Some('\\') => { unescaped.push('\\'); chars.next(); },
-                _ => unescaped.push('\\')
-            }
-        } else {
-            unescaped.push(c);
-        }
-    }
-    
     // Use the standard URL library for proper path encoding
     // This handles spaces, brackets, and all other special characters
     Url::parse("http://example.com/")
         .unwrap()
-        .join(&unescaped)
+        .join(path)
         .unwrap()
         .path()
         .trim_start_matches('/')
         .to_string()
+}
+
+/// Unescape backslash sequences in a string
+/// Simply removes backslashes, treating the character after each as a literal
+fn unescape_backslashes(s: &str) -> String {
+    let mut result = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    
+    while let Some(c) = chars.next() {
+        if c == '\\' && chars.peek().is_some() {
+            // Skip the backslash and add whatever character follows it
+            if let Some(next_char) = chars.next() {
+                result.push(next_char);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    
+    result
 }
 
 /// Set mode based on command line args
