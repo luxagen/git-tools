@@ -79,8 +79,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     
     if operations.list_rurl {
         // Generate remote URL using only the remote relative path
-        let remote_url = get_remote_url(config, remote_rel_path);
-        println!("{}", remote_url);
+        println!("{}", get_remote_url(config, remote_rel_path));
         return Ok(());
     }
     
@@ -135,7 +134,6 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         }
         
         // Get remote URL
-        let remote_url = get_remote_url(config, remote_rel_path);
         eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
