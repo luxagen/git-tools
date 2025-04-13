@@ -204,14 +204,18 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     // Get the current recurse prefix for path display
     let recurse_prefix = config.get_recurse_prefix();
     
+    // Create prefixed paths for display
+    let display_local_path = format!("{}{}", recurse_prefix, local_path);
+    let display_remote_path = format!("{}{}", recurse_prefix, remote_path);
+    
     // Different behavior based on mode flags
     if config.get_mode_flag("MODE_LIST_RREL") {
-        println!("{}{}", recurse_prefix, remote_path);
+        println!("{}", display_remote_path);
         return Ok(());
     }
     
     if config.get_mode_flag("MODE_LIST_LREL") {
-        println!("{}{}", recurse_prefix, local_path);
+        println!("{}", display_local_path);
         return Ok(());
     }
     
@@ -239,13 +243,13 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     // Process based on path state
     if !path.exists() {
         if config.get_mode_flag("MODE_NEW") {
-            eprintln!("ERROR: {} does not exist", local_path);
+            eprintln!("ERROR: {} does not exist", display_local_path);
             return Ok(());
         }
         
         // Only clone if MODE_CLONE is set
         if !config.get_mode_flag("MODE_CLONE") {
-            eprintln!("ERROR: {} does not exist", local_path);
+            eprintln!("ERROR: {} does not exist", display_local_path);
             return Ok(());
         }
         
@@ -265,14 +269,14 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Check if path is a directory
     if !path.is_dir() {
-        eprintln!("ERROR: {} is not a directory", local_path);
+        eprintln!("ERROR: {} is not a directory", display_local_path);
         return Ok(());
     }
     
     // Check if directory is a git repository
     if repository::is_dir_repo_root(local_path)? {
         if config.get_mode_flag("MODE_NEW") {
-            eprintln!("{} already exists (skipping)", local_path);
+            eprintln!("{} already exists (skipping)", display_local_path);
             return Ok(());
         }
         
@@ -282,7 +286,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             _ => remote_path.to_string(),
         };
         
-        eprintln!("{}{} exists", recurse_prefix, local_path);
+        eprintln!("{} exists", display_local_path);
         
         // Update remote and configure
         if config.get_mode_flag("MODE_SET_REMOTE") {
@@ -303,14 +307,14 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Handle non-repo directories
     if !config.get_mode_flag("MODE_NEW") {
-        eprintln!("ERROR: {} is not a Git repository", local_path);
+        eprintln!("ERROR: {} is not a Git repository", display_local_path);
         return Ok(());
     }
     
     // New mode for existing directory
-    eprintln!("Creating new Git repository in {}{}", recurse_prefix, local_path);
+    eprintln!("Creating new Git repository in {}", display_local_path);
     repository::create_new(local_path, remote_path, config)?;
-    eprintln!("{}{} created", recurse_prefix, local_path);
+    eprintln!("{} created", display_local_path);
     
     Ok(())
 }
