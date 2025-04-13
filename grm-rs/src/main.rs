@@ -243,6 +243,12 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             return Ok(());
         }
         
+        // Only clone if MODE_CLONE is set
+        if !config.get_mode_flag("MODE_CLONE") {
+            eprintln!("ERROR: {} does not exist", local_path);
+            return Ok(());
+        }
+        
         // Get remote URL
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
             (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
