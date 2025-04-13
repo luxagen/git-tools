@@ -102,8 +102,25 @@ impl Config {
     
     /// Load configuration from environment variables starting with GRM_
     pub fn load_from_env(&mut self) {
+        // Check if this is a recursive invocation
+        let is_recursive = std::env::var("GRM_RECURSE_PREFIX").is_ok();
+        
         for (key, value) in std::env::vars() {
             if let Some(conf_key) = key.strip_prefix("GRM_") {
+                // For root process, only allow specific variables from environment
+                if !is_recursive {
+                    match conf_key {
+                        "CONFIG_FILENAME" | "LIST_FN" | "CONFIG_CMD" => {
+                            // These are allowed from environment for root process
+                        },
+                        _ => {
+                            // All other variables are not allowed for root process
+                            continue;
+                        }
+                    }
+                }
+                
+                // Set configuration value
                 self.set_from_string(conf_key.to_string(), value);
             }
         }
