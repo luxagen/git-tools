@@ -52,14 +52,6 @@ impl Config {
         }
     }
     
-    /// Check if a boolean flag is set
-    pub fn get_flag(&self, key: &str) -> bool {
-        match key {
-            "OPT_RECURSE" => self.recurse_enabled,
-            _ => false, // Default for unknown keys
-        }
-    }
-    
     /// Get all configuration values as string key-value pairs (for environment variable passing)
     pub fn all_values(&self) -> Vec<(String, String)> {
         let mut result = Vec::new();

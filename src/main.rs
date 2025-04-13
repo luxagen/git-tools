@@ -293,7 +293,11 @@ fn process_repo_line(config: &mut Config, fields: &[String], current_dir: &Path,
     }
     
     // Process the repository
-    process_repo(config, &local_path, &remote_path, &media_path)
+    if let Err(err) = process_repo(config, &local_path, &remote_path, &media_path) {
+        eprintln!("Error processing {}: {}", local_path, err);
+    }
+    
+    Ok(())
 }
 
 /// Split a line by separator character, respecting escaped separators
