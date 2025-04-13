@@ -67,7 +67,7 @@ fn git_fetch(local_path: &str, remote: &str) -> Result<()> {
 
 /// Clone a repository without checking it out
 pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> {
-    println!("Cloning repository {} into {}", remote_url, local_path);
+    println!("Cloning repository \"{}\" into \"{}\"", remote_url, local_path);
     
     // Extract directory name and create parent directory
     let path = Path::new(local_path);
@@ -116,7 +116,7 @@ pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
 
 /// Checkout the default branch after cloning
 pub fn check_out(local_path: &str) -> Result<()> {
-    println!("Checking out repository at {}", local_path);
+    println!("Checking out repository at \"{}\"", local_path);
     
     // Reset to get the working directory in sync with remote
     run_git_command_with_warning(local_path, &["reset", "--hard"], "reset")?;
@@ -135,7 +135,7 @@ fn add_git_remote(local_path: &str, remote_url: &str) -> Result<()> {
 
 /// Create a new repository 
 pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Result<()> {
-    println!("Creating new repository at {} with remote {}", local_path, remote_path);
+    println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_path);
     
     // Check required configuration
     let rpath_template = config.get("RPATH_TEMPLATE")
