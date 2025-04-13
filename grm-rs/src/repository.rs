@@ -67,8 +67,6 @@ pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Re
 
 /// Update the remote URL for a repository
 pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
-    println!("Setting remote URL for {} to {}", local_path, remote_url);
-    
     // Try to update the remote first
     let status = process::run_in_dir(local_path, &["git", "remote", "set-url", "origin", remote_url])?;
     
