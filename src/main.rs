@@ -394,17 +394,33 @@ fn unescape_backslashes(s: &str) -> String {
 
 /// Get formatted remote URL based on configuration and remote relative path
 fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
+    // Get the remote directory, defaulting to empty string if not set
     let remote_dir = config.remote_dir.as_deref().unwrap_or("");
     
-    // Use our new remote_url module to build the URL
+    // Get the base path, defaulting to empty string if not set
+    let base_path = config.rpath_base.as_deref().unwrap_or("");
+    
+    // Combine the paths: base_path + remote_dir + remote_rel_path
+    // First build the complete repository path
+    let full_repo_path = if !remote_dir.is_empty() {
+        if !remote_rel_path.is_empty() {
+            format!("{}/{}", remote_dir, remote_rel_path)
+        } else {
+            remote_dir.to_string()
+        }
+    } else {
+        remote_rel_path.to_string()
+    };
+    
+    // Then use our remote_url module to build the URL with login and combined path
     match &config.rlogin {
         Some(login) if !login.is_empty() => {
-            // We have login information, construct the URL with it
-            remote_url::build_remote_url(Some(login), remote_dir, remote_rel_path)
+            // We have login information
+            remote_url::build_remote_url(Some(login), base_path, &full_repo_path)
         },
         _ => {
-            // No login info, just use the remote directory and path
-            remote_url::build_remote_url(None, remote_dir, remote_rel_path)
+            // No login info
+            remote_url::build_remote_url(None, base_path, &full_repo_path)
         }
     }
 }
