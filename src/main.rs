@@ -220,7 +220,9 @@ fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
             continue;
         }
         
-        process_repo_line(config, line);
+        if let Err(err) = process_repo_line(config, line) {
+            eprintln!("Error processing line \"{}\": {}", line, err);
+        }
     }
     
     // Process subdirectories if recursion is enabled
