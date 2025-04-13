@@ -74,13 +74,13 @@ fn git_fetch(local_path: &str, remote: &str) -> Result<()> {
 pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> {
     println!("Cloning repository \"{}\" into \"{}\"", remote_url, local_path);
     
-    // Extract directory name and create parent directory
-    let path = Path::new(local_path);
-    
-    // Run git clone without a working directory (from wherever we are)
-    // We need to pass the full directory path to git clone, not run it from the parent
+    // Run git clone without a working directory
+    // Pass the local_path as a Path to avoid shell escaping issues
     let status = Command::new("git")
-        .args(["clone", "--no-checkout", remote_url, local_path])
+        .arg("clone")
+        .arg("--no-checkout")
+        .arg(remote_url)
+        .arg(Path::new(local_path))
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit()) 
         .stderr(std::process::Stdio::inherit())
