@@ -16,6 +16,7 @@ mod recursive;
 mod repository;
 mod mode;
 mod config;
+mod remote_url;
 
 use mode::{PrimaryMode, initialize_operations, get_operations};
 use config::Config;
@@ -393,33 +394,18 @@ fn unescape_backslashes(s: &str) -> String {
 
 /// Get formatted remote URL based on configuration and remote relative path
 fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
-    match (&config.rlogin, &config.rpath_base) {
-        (Some(login), Some(base)) => {
-            // Handle escaping characters in remote paths
-            let clean_remote_path = normalize_path_for_url(remote_rel_path);
-            
-            // Trim any trailing slashes from login and base
-            let login = login.trim_end_matches('/');
-            let base = base.trim_matches('/');
-            
-            // Construct a standard Git URI
-            if login.is_empty() {
-                // Local path only
-                format!("{}/{}", base, clean_remote_path)
-            } else if login.contains("://") {
-                // Protocol-based URL (http://, https://, ssh://)
-                // Ensure there's exactly one slash after the domain
-                let login_parts: Vec<&str> = login.splitn(2, "://").collect();
-                let protocol = login_parts[0];
-                let domain = login_parts[1].trim_end_matches('/');
-                
-                format!("{}://{}/{}/{}", protocol, domain, base, clean_remote_path)
-            } else {
-                // SSH SCP-style syntax (user@host:path)
-                format!("{}:{}/{}", login, base, clean_remote_path)
-            }
+    let remote_dir = config.remote_dir.as_deref().unwrap_or("");
+    
+    // Use our new remote_url module to build the URL
+    match &config.rlogin {
+        Some(login) if !login.is_empty() => {
+            // We have login information, construct the URL with it
+            remote_url::build_remote_url(Some(login), remote_dir, remote_rel_path)
         },
-        _ => remote_rel_path.to_string(),
+        _ => {
+            // No login info, just use the remote directory and path
+            remote_url::build_remote_url(None, remote_dir, remote_rel_path)
+        }
     }
 }
 
