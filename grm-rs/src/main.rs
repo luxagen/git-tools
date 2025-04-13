@@ -318,13 +318,8 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         return Ok(());
     }
     
-    // Check if this path is already listed in a .grm.repos file
-    // If it is, we should never try to create a new repository for it
-    let repo_id = config.get("REPO_ID");
-    if repo_id.is_some() {
-        eprintln!("{} already exists (skipping)", prefixed_local_path);
-        return Ok(());
-    }
+    // In "new" mode, we want to create git repositories for existing directories
+    // that aren't git repositories yet, regardless of whether they're in .grm.repos
     
     // Only create a repository if the directory exists
     if path.exists() {
@@ -416,9 +411,6 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         
         // Save a temporary copy of the config
         let mut repo_config = config.clone();
-        
-        // Set REPO_ID to mark this as a listed repository
-        repo_config.set("REPO_ID".to_string(), local_rel.to_string());
         
         // Process the repository with the repository-specific config
         if let Err(e) = process_repo(&repo_config, &local_path, &remote_path, &media_path) {
