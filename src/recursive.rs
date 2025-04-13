@@ -4,10 +4,17 @@ use std::path::Path;
 use std::process::Command;
 use anyhow::{Context, Result, anyhow};
 use crate::Config;
+use crate::mode::get_operations;
 
 /// Recursively process subdirectories, spawning new instances of the program
 /// for directories containing listfiles
 pub fn recurse_listfiles(dir: &Path, config: &Config, mode: &str) -> Result<()> {
+    // Check if recursion is enabled
+    let operations = get_operations();
+    if !operations.recurse {
+        return Ok(());
+    }
+    
     // Clean up the path before processing
     let dir_str = dir.to_string_lossy().to_string();
     let dir_str = dir_str.trim_end_matches('/');

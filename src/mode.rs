@@ -1,13 +1,29 @@
 use clap::ValueEnum;
 use once_cell::sync::OnceCell;
 
-/// Repository operation modes with explicit permissions and capabilities
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModeConfig {
-    /// Primary operation mode
-    pub primary_mode: PrimaryMode,
-    /// Optional operations to perform
-    pub operations: Operations,
+/// Operations that can be performed on repositories
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Operations {
+    /// Clone the repository if it doesn't exist
+    pub clone: bool,
+    /// Configure the repository (run CONFIG_CMD)
+    pub configure: bool,
+    /// Update the remote URL
+    pub set_remote: bool,
+    /// Run git commands in the repository
+    pub git: bool,
+    /// Create a new repository
+    pub new: bool,
+    /// Debug mode
+    pub debug: bool,
+    /// Recurse into subdirectories with listfiles
+    pub recurse: bool,
+    /// List remote relative paths
+    pub list_rrel: bool,
+    /// List remote URLs
+    pub list_rurl: bool,
+    /// List local relative paths
+    pub list_lrel: bool,
 }
 
 /// Primary operation modes that determine the main behavior
@@ -37,29 +53,6 @@ pub enum PrimaryMode {
     New,
 }
 
-/// Operations that can be performed on repositories
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Operations {
-    /// Clone the repository if it doesn't exist
-    pub clone: bool,
-    /// Configure the repository (run CONFIG_CMD)
-    pub configure: bool,
-    /// Update the remote URL
-    pub set_remote: bool,
-    /// Run git commands in the repository
-    pub git: bool,
-    /// Create a new repository
-    pub new: bool,
-    /// Debug mode
-    pub debug: bool,
-    /// List remote relative paths
-    pub list_rrel: bool,
-    /// List remote URLs
-    pub list_rurl: bool,
-    /// List local relative paths
-    pub list_lrel: bool,
-}
-
 impl From<PrimaryMode> for Operations {
     fn from(mode: PrimaryMode) -> Self {
         let mut ops = Operations::default();
@@ -67,34 +60,43 @@ impl From<PrimaryMode> for Operations {
             PrimaryMode::Clone => {
                 ops.clone = true;
                 ops.configure = true;
+                ops.recurse = true;
             },
             PrimaryMode::Git => {
                 ops.git = true;
                 ops.set_remote = true;
                 ops.configure = true;
+                ops.recurse = true;
             },
             PrimaryMode::SetRemote => {
                 ops.set_remote = true;
+                ops.recurse = true;
             },
             PrimaryMode::Configure => {
                 ops.configure = true;
+                ops.recurse = true;
             },
             PrimaryMode::ListRrel => {
                 ops.list_rrel = true;
+                ops.recurse = true;
             },
             PrimaryMode::ListRurl => {
                 ops.list_rurl = true;
+                ops.recurse = true;
             },
             PrimaryMode::ListLrel => {
                 ops.list_lrel = true;
+                ops.recurse = true;
             },
             PrimaryMode::Run => {
                 ops.clone = true;
                 ops.set_remote = true;
                 ops.configure = true;
+                ops.recurse = true;
             },
             PrimaryMode::New => {
                 ops.new = true;
+                ops.recurse = true;
             },
         }
         ops
@@ -117,56 +119,28 @@ impl std::fmt::Display for PrimaryMode {
     }
 }
 
-impl ModeConfig {
-    /// Create a new ModeConfig from a primary mode
-    pub fn new(primary_mode: PrimaryMode) -> Self {
-        let operations = Operations::from(primary_mode);
-        Self {
-            primary_mode,
-            operations,
-        }
-    }
+/// Global OPERATIONS initialized once at startup
+static OPERATIONS: OnceCell<Operations> = OnceCell::new();
 
+/// Initialize the global operations - call this ONCE at startup
+pub fn initialize_operations(primary_mode: PrimaryMode) {
+    // Create Operations from the primary mode
+    let operations = Operations::from(primary_mode);
+    
+    // Initialize the global operations once
+    // If this fails, it means initialize_operations was called more than once
+    OPERATIONS.set(operations).expect("OPERATIONS already initialized");
+}
+
+/// Get a reference to the operations
+/// Panics if initialize_operations wasn't called first
+pub fn get_operations() -> &'static Operations {
+    OPERATIONS.get().expect("OPERATIONS not initialized")
+}
+
+impl Operations {
     /// Check if this is a listing mode
     pub fn is_listing_mode(&self) -> bool {
-        matches!(
-            self.primary_mode,
-            PrimaryMode::ListRrel | PrimaryMode::ListRurl | PrimaryMode::ListLrel
-        )
+        self.list_rrel || self.list_rurl || self.list_lrel
     }
-    
-    /// Get a flag by its legacy name for compatibility with the old code
-    pub fn get_flag(&self, flag_name: &str) -> bool {
-        match flag_name {
-            "MODE_CLONE" => self.operations.clone,
-            "MODE_CONFIGURE" => self.operations.configure,
-            "MODE_SET_REMOTE" => self.operations.set_remote,
-            "MODE_GIT" => self.operations.git,
-            "MODE_NEW" => self.operations.new,
-            "MODE_DEBUG" => self.operations.debug,
-            "MODE_LIST_RREL" => self.operations.list_rrel,
-            "MODE_LIST_RURL" => self.operations.list_rurl,
-            "MODE_LIST_LREL" => self.operations.list_lrel,
-            _ => false,
-        }
-    }
-}
-
-/// Global MODE_CONFIG initialized once at startup
-static MODE_CONFIG: OnceCell<ModeConfig> = OnceCell::new();
-
-/// Initialize the global mode configuration - call this ONCE at startup
-pub fn initialize_mode(primary_mode: PrimaryMode) {
-    // Create a new ModeConfig instance from the primary mode
-    let mode_config = ModeConfig::new(primary_mode);
-    
-    // Initialize the global configuration once
-    // If this fails, it means initialize_mode was called more than once
-    MODE_CONFIG.set(mode_config).expect("MODE_CONFIG already initialized");
-}
-
-/// Get a reference to the mode configuration
-/// Panics if initialize_mode wasn't called first
-pub fn get_mode_config() -> &'static ModeConfig {
-    MODE_CONFIG.get().expect("MODE_CONFIG not initialized")
 }
