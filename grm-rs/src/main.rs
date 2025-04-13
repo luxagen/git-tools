@@ -457,12 +457,24 @@ fn cat_path(pieces: &[&str]) -> String {
 
 /// Clean and normalize a path for remote URL construction
 fn normalize_path_for_url(path: &str) -> String {
-    // First handle backslash escapes (convert \' to ' etc.)
-    let unescaped = path.replace("\\'", "'")
-                      .replace("\\\"", "\"")
-                      .replace("\\$", "$")
-                      .replace("\\`", "`")
-                      .replace("\\\\", "\\");
+    // Single-pass handling of backslash escapes to reduce allocations
+    let mut unescaped = String::with_capacity(path.len());
+    let mut chars = path.chars().peekable();
+    
+    while let Some(c) = chars.next() {
+        if c == '\\' && chars.peek().is_some() {
+            match chars.peek() {
+                Some('\'') => { unescaped.push('\''); chars.next(); },
+                Some('\"') => { unescaped.push('\"'); chars.next(); },
+                Some('$') => { unescaped.push('$'); chars.next(); },
+                Some('`') => { unescaped.push('`'); chars.next(); },
+                Some('\\') => { unescaped.push('\\'); chars.next(); },
+                _ => unescaped.push('\\')
+            }
+        } else {
+            unescaped.push(c);
+        }
+    }
     
     // Use the standard URL library for proper path encoding
     // This handles spaces, brackets, and all other special characters
