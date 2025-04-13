@@ -11,6 +11,9 @@ use url::Url;
 mod process;
 mod recursive;
 mod repository;
+mod mode;
+
+use mode::{PrimaryMode, ModeConfig, MODE_CONFIG, initialize_mode};
 
 /// Separator character used in .grm.repos files
 const LIST_SEPARATOR: char = '*';
@@ -21,62 +24,18 @@ const LIST_SEPARATOR: char = '*';
 struct Args {
     /// Mode of operation
     #[clap(value_enum)]
-    mode: Mode,
+    mode: PrimaryMode,
     
     /// Additional arguments (for git mode)
     #[clap(trailing_var_arg = true)]
     args: Vec<String>,
 }
 
-#[derive(Debug, Clone, ValueEnum)]
-enum Mode {
-    /// Clone repositories
-    Clone,
-    /// Execute git commands
-    Git,
-    /// Update remote URL
-    #[clap(name = "set-remote")]
-    SetRemote,
-    /// Configure repositories
-    Configure,
-    /// List remote relative paths
-    #[clap(name = "list-rrel")]
-    ListRrel,
-    /// List remote URLs
-    #[clap(name = "list-rurl")]
-    ListRurl,
-    /// List local relative paths
-    #[clap(name = "list-lrel")]
-    ListLrel,
-    /// Run with clone and set-remote
-    Run,
-    /// Create new repositories
-    New,
-}
-
-impl std::fmt::Display for Mode {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Mode::Clone => write!(f, "clone"),
-            Mode::Git => write!(f, "git"),
-            Mode::SetRemote => write!(f, "set-remote"),
-            Mode::Configure => write!(f, "configure"),
-            Mode::ListRrel => write!(f, "list-rrel"),
-            Mode::ListRurl => write!(f, "list-rurl"),
-            Mode::ListLrel => write!(f, "list-lrel"),
-            Mode::Run => write!(f, "run"),
-            Mode::New => write!(f, "new"),
-        }
-    }
-}
-
 /// Config structure to hold GRM configuration
 #[derive(Clone)]
-struct Config {
+pub struct Config {
     /// Configuration loaded from files and environment
     values: HashMap<String, String>,
-    /// Flag values for operation modes
-    mode_flags: HashMap<String, bool>,
     /// Path to current execution
     recurse_prefix: String,
 }
@@ -86,7 +45,6 @@ impl Config {
     fn new() -> Self {
         let mut config = Config {
             values: HashMap::new(),
-            mode_flags: HashMap::new(),
             recurse_prefix: String::new(),
         };
 
@@ -112,7 +70,7 @@ impl Config {
     }
 
     /// Get a configuration value
-    fn get(&self, key: &str) -> Option<&String> {
+    pub fn get(&self, key: &str) -> Option<&String> {
         self.values.get(key)
     }
 
@@ -127,16 +85,6 @@ impl Config {
             Some(value) => !value.is_empty(),
             None => false,
         }
-    }
-
-    /// Set a mode flag
-    fn set_mode_flag(&mut self, mode: &str, value: bool) {
-        self.mode_flags.insert(mode.to_string(), value);
-    }
-
-    /// Get a mode flag
-    fn get_mode_flag(&self, mode: &str) -> bool {
-        *self.mode_flags.get(mode).unwrap_or(&false)
     }
     
     /// Get the current recurse prefix
@@ -218,17 +166,17 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     let prefixed_remote_path = format!("{}{}", recurse_prefix, remote_path);
     
     // Different behavior based on mode flags
-    if config.get_mode_flag("MODE_LIST_RREL") {
+    if MODE_CONFIG.get_flag("MODE_LIST_RREL") {
         println!("{}", prefixed_remote_path);
         return Ok(());
     }
     
-    if config.get_mode_flag("MODE_LIST_LREL") {
+    if MODE_CONFIG.get_flag("MODE_LIST_LREL") {
         println!("{}", prefixed_local_path);
         return Ok(());
     }
     
-    if config.get_mode_flag("MODE_LIST_RURL") {
+    if MODE_CONFIG.get_flag("MODE_LIST_RURL") {
         // Construct remote URL using the remote_path (without prefix)
         // since the remote server paths include the full hierarchy
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
@@ -244,9 +192,9 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     // Skip processing for listing modes
-    if config.get_mode_flag("MODE_LIST_RREL") || 
-       config.get_mode_flag("MODE_LIST_LREL") || 
-       config.get_mode_flag("MODE_LIST_RURL") {
+    if MODE_CONFIG.get_flag("MODE_LIST_RREL") || 
+       MODE_CONFIG.get_flag("MODE_LIST_LREL") || 
+       MODE_CONFIG.get_flag("MODE_LIST_RURL") {
         return Ok(());
     }
     
@@ -255,13 +203,13 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Process based on path state
     if !path.exists() {
-        if config.get_mode_flag("MODE_NEW") {
+        if MODE_CONFIG.get_flag("MODE_NEW") {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
         
         // Only clone if MODE_CLONE is set
-        if !config.get_mode_flag("MODE_CLONE") {
+        if !MODE_CONFIG.get_flag("MODE_CLONE") {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
@@ -292,7 +240,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     
     // Check if directory is a git repository
     if repository::is_dir_repo_root(local_path)? {
-        if config.get_mode_flag("MODE_NEW") {
+        if MODE_CONFIG.get_flag("MODE_NEW") {
             eprintln!("{} already exists (skipping)", prefixed_local_path);
             return Ok(());
         }
@@ -310,15 +258,15 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
-        if config.get_mode_flag("MODE_SET_REMOTE") {
+        if MODE_CONFIG.get_flag("MODE_SET_REMOTE") {
             repository::set_remote(local_path, &remote_url)?;
         }
         
-        if config.get_mode_flag("MODE_CONFIGURE") {
+        if MODE_CONFIG.get_flag("MODE_CONFIGURE") {
             repository::configure_repo(local_path, media_path, config)?;
         }
         
-        if config.get_mode_flag("MODE_GIT") {
+        if MODE_CONFIG.get_flag("MODE_GIT") {
             // Execute git commands in the repository
             if let Some(git_args) = config.get("GIT_ARGS") {
                 repository::run_git_command(local_path, git_args)?;
@@ -329,7 +277,7 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     // Handle non-repo directories
-    if !config.get_mode_flag("MODE_NEW") {
+    if !MODE_CONFIG.get_flag("MODE_NEW") {
         eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
         return Ok(());
     }
@@ -424,7 +372,7 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
         let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
         let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
         
-        if config.get_mode_flag("MODE_DEBUG") {
+        if MODE_CONFIG.get_flag("MODE_DEBUG") {
             eprintln!("Potential target: {}", local_path);
         }
         
@@ -520,87 +468,37 @@ fn unescape_backslashes(s: &str) -> String {
     result
 }
 
-/// Set mode based on command line args
-fn set_mode(config: &mut Config, mode: Mode) {
-    match mode {
-        Mode::Clone => {
-            config.set_mode_flag("MODE_CLONE", true);
-            config.set_mode_flag("MODE_CONFIGURE", true); // Cloning requires configuration
-        },
-        Mode::Git => {
-            config.set_mode_flag("MODE_GIT", true);
-            config.set_mode_flag("MODE_SET_REMOTE", true);
-            config.set_mode_flag("MODE_CONFIGURE", true);
-        },
-        Mode::SetRemote => {
-            config.set_mode_flag("MODE_SET_REMOTE", true);
-        },
-        Mode::Configure => {
-            config.set_mode_flag("MODE_CONFIGURE", true);
-        },
-        Mode::ListRrel => {
-            config.set_mode_flag("MODE_LIST_RREL", true);
-        },
-        Mode::ListRurl => {
-            config.set_mode_flag("MODE_LIST_RURL", true);
-        },
-        Mode::ListLrel => {
-            config.set_mode_flag("MODE_LIST_LREL", true);
-        },
-        Mode::Run => {
-            config.set_mode_flag("MODE_CLONE", true);
-            config.set_mode_flag("MODE_SET_REMOTE", true);
-            config.set_mode_flag("MODE_CONFIGURE", true);
-        },
-        Mode::New => {
-            config.set_mode_flag("MODE_NEW", true);
-        },
-    }
-}
-
 fn main() -> Result<()> {
     // Parse command line arguments
     let args = Args::parse();
     
-    // Initialize configuration
+    // Create configuration
     let mut config = Config::new();
     
-    // Find and load configuration file
+    // Load configuration from file
     let conf_path = find_conf_file(&config)?;
     config.load_from_file(&conf_path)?;
     
-    // Set mode based on command line args
-    set_mode(&mut config, args.mode.clone());
+    // Initialize mode configuration
+    initialize_mode(args.mode);
     
     // Store git command arguments if in git mode
     if args.mode.to_string() == "git" && !args.args.is_empty() {
-        config.set("GIT_ARGS".to_string(), args.args.join(" "));
+        let git_args = args.args.join(" ");
+        config.set("GIT_ARGS".to_string(), git_args);
     }
     
-    // Get current directory for processing listfiles
-    let current_dir = env::current_dir()?;
-    
-    // Find directory containing listfile by walking up from current directory
+    // Get listfile directory and path
     let list_dir = find_listfile_dir(&config)?;
-    env::set_current_dir(&list_dir)?;
+    let list_file_name = config.get("LIST_FN")
+        .ok_or_else(|| anyhow!("LIST_FN not set"))?;
+    let list_path = list_dir.join(list_file_name);
     
-    // Get the listfile name and check it exists before processing
-    let list_fn = match config.get("LIST_FN") {
-        Some(name) => name.clone(),
-        None => return Err(anyhow!("LIST_FN not set in configuration")),
-    };
-    
-    let listfile = Path::new(&list_fn);
-    if !listfile.exists() {
-        return Err(anyhow!("Listfile {} not found", listfile.display()));
-    }
-    
-    // Process the listfile
-    process_listfile(&mut config, listfile)?;
-    
-    // Recursively process subdirectories if enabled
-    if config.get_flag("OPT_RECURSE") {
-        recursive::recurse_listfiles(&current_dir, &config, &args.mode.to_string())?;
+    // Process listfile
+    if list_path.exists() {
+        process_listfile(&mut config, &list_path)?;
+    } else {
+        eprintln!("No .grm.repos file found");
     }
     
     Ok(())
