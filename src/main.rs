@@ -226,16 +226,19 @@ fn get_mode_string() -> String {
 
 /// Process a repository line from a listfile
 fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
+    // Skip comments and empty lines BEFORE splitting
+    let trimmed = line.trim();
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        eprintln!("DEBUG-SKIP: Skipping empty/comment line");
+        return Ok(());
+    }
+
     // Process line to extract fields
     let fields = split_with_escapes(line, LIST_SEPARATOR);
     
-    // Skip comments and empty lines (should not reach here, as this is handled in the caller)
-    if fields.is_empty() || fields[0].starts_with('#') || fields[0].trim().is_empty() {
-        return Ok(());
-    }
     
-    // Handle config lines (no remote rel path)
-    if fields.len() >= 2 && (fields[0].is_empty() || fields[0].trim().is_empty()) {
+    // Handle config lines (first field is empty, indicating it starts with separator)
+    if fields.len() >= 2 && fields[0].trim().is_empty() {
         // This is a config line
         if fields.len() >= 3 {
             // Format: * KEY * VALUE
@@ -298,7 +301,16 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
 fn split_with_escapes(line: &str, separator: char) -> Vec<String> {
     let mut result = Vec::new();
     let mut current = String::new();
-    let mut chars = line.chars();
+    let mut chars = line.chars().peekable();
+    
+    // Special handling for lines that start with the separator
+    if let Some(&c) = chars.peek() {
+        if c == separator {
+            // If line starts with separator, add an empty string as first field
+            result.push(String::new());
+            chars.next(); // Consume the separator
+        }
+    }
     
     while let Some(c) = chars.next() {
         if c == '\\' {
