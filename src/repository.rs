@@ -116,6 +116,15 @@ pub fn check_out(local_path: &str) -> Result<()> {
     Ok(())
 }
 
+/// Add a git remote - used for new repositories
+fn add_git_remote(local_path: &str, remote_url: &str) -> Result<()> {
+    println!("Adding remote origin");
+    run_git_cmd_internal(local_path, &["remote", "add", "origin", remote_url])?;
+    git_fetch(local_path, "origin")?;
+    
+    Ok(())
+}
+
 /// Create a new repository 
 pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Result<()> {
     println!("Creating new repository at {} with remote {}", local_path, remote_path);
@@ -188,11 +197,10 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     let git_remote = format!("{}{}", effective_login, grm_rpath);
     
     // Set the repository remote
-    set_remote(local_path, &git_remote)?;
+    add_git_remote(local_path, &git_remote)?;
     
     // Checkout master if this was a new repository
     if virgin {
-        git_fetch(local_path, "origin")?;
         run_git_cmd_internal(local_path, &["checkout", "master"])?;
     }
     
