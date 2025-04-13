@@ -8,18 +8,23 @@ use crate::process;
 
 /// Check if directory is a Git repository root
 pub fn is_dir_repo_root(local_path: &str) -> Result<bool> {
+    // Use git rev-parse --git-dir which is more efficient for checking repository existence
+    // This is a plumbing command that directly checks for the .git directory
     let output = Command::new("git")
-        .args(["rev-parse", "--show-prefix"])
+        .args(["rev-parse", "--git-dir"])
         .current_dir(local_path)
         .output()
         .with_context(|| format!("Failed to check if {} is a git repo root", local_path))?;
     
+    // If command succeeds, it's a git repository
     if !output.status.success() {
         return Ok(false);
     }
     
-    let prefix = String::from_utf8_lossy(&output.stdout).trim().to_string();
-    Ok(prefix.is_empty())
+    // Check if we're at the root (.git dir is directly in this directory)
+    // If output is just ".git", we're at the repository root
+    let git_dir = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(git_dir == ".git")
 }
 
 /// Initialize a git repository
