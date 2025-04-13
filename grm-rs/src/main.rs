@@ -78,13 +78,23 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
     }
     
     if operations.list_rurl {
-        // Construct remote URL using the remote_path (without prefix)
-        // since the remote server paths include the full hierarchy
+        // Get remote URL
         let remote_url = match (&config.rlogin, &config.rpath_base) {
             (Some(login), Some(base)) => {
                 // Handle escaping characters in remote paths
                 let clean_remote_path = normalize_path_for_url(remote_path);
-                format!("{}{}/{}", login, base, clean_remote_path)
+                
+                // Ensure login and base are properly formatted
+                let login = login.trim_end_matches('/');
+                let base = base.trim_matches('/');
+                
+                if login.contains("://") {
+                    // Login already has protocol
+                    format!("{}//{}/{}", login, base, clean_remote_path)
+                } else {
+                    // Simple login without protocol
+                    format!("{}:{}/{}", login, base, clean_remote_path)
+                }
             },
             _ => remote_path.to_string(),
         };
@@ -118,7 +128,18 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             (Some(login), Some(base)) => {
                 // Handle escaping characters in remote paths
                 let clean_remote_path = normalize_path_for_url(remote_path);
-                format!("{}{}/{}", login, base, clean_remote_path)
+                
+                // Ensure login and base are properly formatted
+                let login = login.trim_end_matches('/');
+                let base = base.trim_matches('/');
+                
+                if login.contains("://") {
+                    // Login already has protocol
+                    format!("{}//{}/{}", login, base, clean_remote_path)
+                } else {
+                    // Simple login without protocol
+                    format!("{}:{}/{}", login, base, clean_remote_path)
+                }
             },
             _ => remote_path.to_string(),
         };
@@ -157,11 +178,21 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
             (Some(login), Some(base)) => {
                 // Handle escaping characters in remote paths
                 let clean_remote_path = normalize_path_for_url(remote_path);
-                format!("{}{}/{}", login, base, clean_remote_path)
+                
+                // Ensure login and base are properly formatted
+                let login = login.trim_end_matches('/');
+                let base = base.trim_matches('/');
+                
+                if login.contains("://") {
+                    // Login already has protocol
+                    format!("{}//{}/{}", login, base, clean_remote_path)
+                } else {
+                    // Simple login without protocol
+                    format!("{}:{}/{}", login, base, clean_remote_path)
+                }
             },
             _ => remote_path.to_string(),
         };
-        
         eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
