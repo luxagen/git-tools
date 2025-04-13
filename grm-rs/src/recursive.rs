@@ -114,7 +114,7 @@ fn recurse_to_subdirectory(path: &Path, config: &Config, mode: &str) -> Result<(
     
     if !status.success() {
         let code = status.code().unwrap_or(-1);
-        return Err(anyhow!("Recursive instance failed with exit code: {}", code));
+        eprintln!("Warning: Recursive instance in {} exited with code: {}", path.display(), code);
     }
     
     Ok(())
