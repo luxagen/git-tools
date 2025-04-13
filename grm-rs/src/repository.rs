@@ -151,39 +151,8 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     // Git remote URL
     let git_remote = format!("{}{}", effective_login, grm_rpath);
     
-    // Check if remote exists
-    let remote_exists = Command::new("git")
-        .args(["remote", "get-url", "origin"])
-        .current_dir(local_path)
-        .output()
-        .map(|output| output.status.success())
-        .unwrap_or(false);
-    
-    if remote_exists {
-        // Update existing remote
-        println!("Updating origin");
-        let status = process::run_in_dir(local_path, &["git", "remote", "set-url", "origin", &git_remote])?;
-        if status != 0 {
-            println!("Warning: Failed to update remote URL, but continuing anyway");
-        }
-        
-        let status = process::run_in_dir(local_path, &["git", "fetch", "origin"])?;
-        if status != 0 {
-            println!("Warning: git fetch failed with code {}", status);
-        }
-    } else {
-        // Add new remote
-        println!("Adding remote origin");
-        let status = process::run_in_dir(local_path, &["git", "remote", "add", "origin", &git_remote])?;
-        if status != 0 {
-            return Err(anyhow!("Failed to add remote with exit code: {}", status));
-        }
-        
-        let status = process::run_in_dir(local_path, &["git", "fetch", "origin"])?;
-        if status != 0 {
-            println!("Warning: git fetch failed with code {}, but remote was added", status);
-        }
-    }
+    // Set the repository remote
+    set_remote(local_path, &git_remote)?;
     
     // Checkout master if this was a new repository
     if virgin {
