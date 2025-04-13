@@ -6,6 +6,7 @@ use anyhow::{Context, Result, anyhow};
 use clap::{Parser, ValueEnum};
 use std::collections::HashMap;
 use regex::Regex;
+use url::Url;
 
 mod process;
 mod recursive;
@@ -228,7 +229,11 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         // Construct remote URL using the remote_path (without prefix)
         // since the remote server paths include the full hierarchy
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
-            (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
+            (Some(login), Some(base)) => {
+                // Handle escaping characters in remote paths
+                let clean_remote_path = normalize_path_for_url(remote_path);
+                format!("{}{}/{}", login, base, clean_remote_path)
+            },
             _ => remote_path.to_string(),
         };
         println!("{}", remote_url);
@@ -260,7 +265,11 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         
         // Get remote URL
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
-            (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
+            (Some(login), Some(base)) => {
+                // Handle escaping characters in remote paths
+                let clean_remote_path = normalize_path_for_url(remote_path);
+                format!("{}{}/{}", login, base, clean_remote_path)
+            },
             _ => remote_path.to_string(),
         };
         
@@ -287,7 +296,11 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         
         // Get remote URL
         let remote_url = match (config.get("RLOGIN"), config.get("RPATH_BASE")) {
-            (Some(login), Some(base)) => format!("{}{}/{}", login, base, remote_path),
+            (Some(login), Some(base)) => {
+                // Handle escaping characters in remote paths
+                let clean_remote_path = normalize_path_for_url(remote_path);
+                format!("{}{}/{}", login, base, clean_remote_path)
+            },
             _ => remote_path.to_string(),
         };
         
@@ -440,6 +453,26 @@ fn cat_path(pieces: &[&str]) -> String {
     }
     
     result
+}
+
+/// Clean and normalize a path for remote URL construction
+fn normalize_path_for_url(path: &str) -> String {
+    // First handle backslash escapes (convert \' to ' etc.)
+    let unescaped = path.replace("\\'", "'")
+                      .replace("\\\"", "\"")
+                      .replace("\\$", "$")
+                      .replace("\\`", "`")
+                      .replace("\\\\", "\\");
+    
+    // Use the standard URL library for proper path encoding
+    // This handles spaces, brackets, and all other special characters
+    Url::parse("http://example.com/")
+        .unwrap()
+        .join(&unescaped)
+        .unwrap()
+        .path()
+        .trim_start_matches('/')
+        .to_string()
 }
 
 /// Set mode based on command line args
