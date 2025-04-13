@@ -22,21 +22,61 @@ pub fn is_dir_repo_root(local_path: &str) -> Result<bool> {
     Ok(prefix.is_empty())
 }
 
-/// Clone a repository without checking it out
-pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> {
-    println!("Cloning {} to {} (no checkout)", remote_url, local_path);
-    
-    // Ensure parent directory exists
-    if let Some(parent) = Path::new(local_path).parent() {
-        fs::create_dir_all(parent)
-            .with_context(|| format!("Failed to create parent directories for {}", local_path))?;
+/// Initialize a git repository
+fn init_git_repository(local_path: &str) -> Result<()> {
+    // Initialize git repository
+    let status = process::run_in_dir(local_path, &["git", "init", "-q"])?;
+    if status != 0 {
+        return Err(anyhow!("Git init failed with exit code: {}", status));
     }
+    Ok(())
+}
+
+/// Run a git command and expect success (internal version)
+fn run_git_cmd_internal(local_path: &str, args: &[&str]) -> Result<()> {
+    let mut cmd_args = vec!["git"];
+    cmd_args.extend(args);
     
-    let status = process::run_sync_redir(&["git", "clone", "--no-checkout", remote_url, local_path])?;
+    let status = process::run_in_dir(local_path, &cmd_args)?;
     
     if status != 0 {
-        return Err(anyhow!("Failed to clone repository with exit code: {}", status));
+        return Err(anyhow!("Git command '{}' failed with exit code: {}", 
+                           args.join(" "), status));
     }
+    
+    Ok(())
+}
+
+/// Run a git command and print a warning on failure instead of returning an error
+fn run_git_command_with_warning(local_path: &str, args: &[&str], operation: &str) -> Result<()> {
+    let mut cmd_args = vec!["git"];
+    cmd_args.extend(args);
+    
+    let status = process::run_in_dir(local_path, &cmd_args)?;
+    if status != 0 {
+        println!("Warning: git {} failed with code {}", operation, status);
+    }
+    
+    Ok(())
+}
+
+/// Helper for fetching from a remote
+fn git_fetch(local_path: &str, remote: &str) -> Result<()> {
+    run_git_command_with_warning(local_path, &["fetch", remote], "fetch")
+}
+
+/// Clone a repository without checking it out
+pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> {
+    println!("Cloning repository {} into {}", remote_url, local_path);
+    
+    // Create parent directory if needed
+    if let Some(parent) = Path::new(local_path).parent() {
+        fs::create_dir_all(parent)
+            .with_context(|| format!("Failed to create directory: {}", parent.display()))?;
+    }
+    
+    // Clone the repository with --no-checkout
+    run_git_cmd_internal(local_path, &["clone", "--no-checkout", remote_url, "."])?;
     
     Ok(())
 }
@@ -49,15 +89,18 @@ pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Re
 /// Update the remote URL for a repository
 pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
     // Try to update the remote first
-    let status = process::run_in_dir(local_path, &["git", "remote", "set-url", "origin", remote_url])?;
+    let mut git_args = vec!["remote", "set-url", "origin", remote_url];
+    let mut cmd_args = vec!["git"];
+    cmd_args.extend(git_args);
+    
+    // We handle status manually here because we want to try adding if updating fails
+    let status = process::run_in_dir(local_path, &cmd_args)?;
     
     // If remote update failed (exit code 3 for non-existent remote), try to add it
     if status != 0 {
-        let status = process::run_in_dir(local_path, &["git", "remote", "add", "-f", "origin", remote_url])?;
-        
-        if status != 0 {
-            return Err(anyhow!("Failed to add remote with exit code: {}", status));
-        }
+        println!("Adding remote origin");
+        run_git_cmd_internal(local_path, &["remote", "add", "origin", remote_url])?;
+        git_fetch(local_path, "origin")?;
     }
     
     Ok(())
@@ -68,11 +111,7 @@ pub fn check_out(local_path: &str) -> Result<()> {
     println!("Checking out repository at {}", local_path);
     
     // Reset to get the working directory in sync with remote
-    let status = process::run_in_dir(local_path, &["git", "reset", "--hard"])?;
-    
-    if status != 0 {
-        return Err(anyhow!("Failed to reset repository with exit code: {}", status));
-    }
+    run_git_command_with_warning(local_path, &["reset", "--hard"], "reset")?;
     
     Ok(())
 }
@@ -140,10 +179,7 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     }
     
     // Initialize git repository
-    let status = process::run_in_dir(local_path, &["git", "init", "-q"])?;
-    if status != 0 {
-        return Err(anyhow!("Git init failed with exit code: {}", status));
-    }
+    init_git_repository(local_path)?;
     
     // Configure the repository
     execute_config_cmd(local_path, config)?;
@@ -156,33 +192,21 @@ pub fn create_new(local_path: &str, remote_path: &str, config: &Config) -> Resul
     
     // Checkout master if this was a new repository
     if virgin {
-        let status = process::run_in_dir(local_path, &["git", "checkout", "master"])?;
-        if status != 0 {
-            println!("Warning: git checkout master failed with code {}", status);
-        }
+        git_fetch(local_path, "origin")?;
+        run_git_cmd_internal(local_path, &["checkout", "master"])?;
     }
     
     println!("Repository created successfully");
     Ok(())
 }
 
-/// Run a git command in the repository
+/// Run a git command in the repository (public function called from main.rs)
 pub fn run_git_command(local_path: &str, args_str: &str) -> Result<()> {
     // Split the arguments string into individual arguments
     let args: Vec<&str> = args_str.split_whitespace().collect();
     
-    // Construct the full command: git + args
-    let mut cmd_args = vec!["git"];
-    cmd_args.extend(args);
-    
-    // Run the git command in the repository directory
-    let status = process::run_in_dir(local_path, &cmd_args)?;
-    
-    if status != 0 {
-        return Err(anyhow!("Git command failed with exit code: {}", status));
-    }
-    
-    Ok(())
+    // Use our standardized helper internally
+    run_git_cmd_internal(local_path, &args)
 }
 
 /// Shell command structure
