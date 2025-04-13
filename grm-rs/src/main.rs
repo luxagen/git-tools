@@ -18,6 +18,10 @@ struct Args {
     /// Mode of operation
     #[clap(value_enum)]
     mode: Mode,
+    
+    /// Additional arguments (for git mode)
+    #[clap(trailing_var_arg = true)]
+    args: Vec<String>,
 }
 
 #[derive(Debug, Clone, ValueEnum)]
@@ -299,7 +303,9 @@ fn process_repo(config: &Config, local_path: &str, remote_path: &str, media_path
         
         if config.get_mode_flag("MODE_GIT") {
             // Execute git commands in the repository
-            // Implementation would depend on command-line arguments
+            if let Some(git_args) = config.get("GIT_ARGS") {
+                repository::run_git_command(local_path, git_args)?;
+            }
         }
         
         return Ok(());
@@ -474,6 +480,11 @@ fn main() -> Result<()> {
     
     // Set mode based on command line args
     set_mode(&mut config, args.mode.clone());
+    
+    // Store git command arguments if in git mode
+    if args.mode.to_string() == "git" && !args.args.is_empty() {
+        config.set("GIT_ARGS".to_string(), args.args.join(" "));
+    }
     
     // Get current directory for processing listfiles
     let current_dir = env::current_dir()?;
