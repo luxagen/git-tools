@@ -108,9 +108,9 @@ pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
     // We handle status manually here because we want to try adding if updating fails
     let status = process::run_in_dir(local_path, &cmd_args)?;
     
-    // If remote update failed with exit code 3 (non-existent remote), try to add it
-    // The Perl version checks for 512, which is 3 << 8 due to how Perl shifts exit codes
-    if status == 3 {
+    // If remote update failed with exit code 2 (non-existent remote), try to add it
+    // This matches the Perl version's check for 512 (which is 2 << 8 in Perl's exit code handling)
+    if status == 2 {
         println!("Adding remote origin");
         run_git_cmd_internal(local_path, &["remote", "add", "-f", "origin", remote_url])?;
     } else if status != 0 {
