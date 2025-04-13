@@ -171,7 +171,11 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     if path.exists() {
         // New mode for existing directory
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
-        repository::create_new(local_path, remote_rel_path, config)?;
+        
+        // Use the same helper function to get the remote repository path
+        let remote_repo_path = get_remote_repo_path(config, remote_rel_path);
+        
+        repository::create_new(local_path, &remote_repo_path, config)?;
         eprintln!("{} created", prefixed_local_path);
     } else {
         // Directory doesn't exist, just skip it
