@@ -209,11 +209,7 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
     let current_dir = env::current_dir()?;
     let tree_filter = current_dir.to_string_lossy().to_string();
     
-    // Get configuration for repository processing
-    let remote_dir = config.remote_dir.as_deref().unwrap_or("");
-    let local_dir = config.local_dir.as_deref().unwrap_or("");
-    let gm_dir = config.gm_dir.as_deref().unwrap_or("");
-    
+    // Process each line in the listfile
     for line in reader.lines() {
         let line = line?;
         
@@ -237,56 +233,67 @@ fn process_listfile(config: &mut Config, path: &Path) -> Result<()> {
             continue;
         }
         
-        // Extract repo name from remote path for default values
-        let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-        let repo_name = match re.captures(&fields[0]) {
-            Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
-            None => "",
-        };
-        
-        // Get remaining path parts
-        let local_rel_raw = if fields.len() >= 2 { fields[1].clone() } else { String::new() };
-        let gm_rel_raw = if fields.len() >= 3 { fields[2].clone() } else { String::new() };
-        
-        // Unescape all paths - do this once and store as String
-        let remote_rel_unescaped = unescape_backslashes(&fields[0]);
-        
-        // Apply defaults and unescape
-        let local_rel_unescaped = if local_rel_raw.is_empty() {
-            repo_name.to_string()
-        } else {
-            unescape_backslashes(&local_rel_raw)
-        };
-        
-        let gm_rel_unescaped = if gm_rel_raw.is_empty() {
-            repo_name.to_string()
-        } else {
-            unescape_backslashes(&gm_rel_raw)
-        };
-        
-        // Construct full paths
-        let remote_path = cat_path(&[remote_dir, &remote_rel_unescaped]);
-        let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
-        let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
-        
-        if get_operations().debug {
-            eprintln!("Potential target: {}", local_path);
-        }
-        
-        // Only process repositories in the current directory tree
-        let full_local_path = cat_path(&[&current_dir.to_string_lossy(), &local_path]);
-        if !full_local_path.contains(&tree_filter) {
-            if get_operations().debug {
-                eprintln!("Skipping {} (outside current directory tree)", local_path);
-            }
-            continue;
-        }
-        
-        // Process the repository
-        process_repo(config, &local_path, &remote_path, &media_path)?;
+        // Process repository lines
+        process_repo_line(config, &fields, &current_dir, &tree_filter)?;
     }
     
     Ok(())
+}
+
+/// Process a repository line from a listfile
+fn process_repo_line(config: &mut Config, fields: &[String], current_dir: &Path, tree_filter: &str) -> Result<()> {
+    // Extract repo name from remote path for default values
+    let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
+    let repo_name = match re.captures(&fields[0]) {
+        Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
+        None => "",
+    };
+    
+    // Get remaining path parts
+    let local_rel_raw = if fields.len() >= 2 { fields[1].clone() } else { String::new() };
+    let gm_rel_raw = if fields.len() >= 3 { fields[2].clone() } else { String::new() };
+    
+    // Unescape all paths - do this once and store as String
+    let remote_rel_unescaped = unescape_backslashes(&fields[0]);
+    
+    // Apply defaults and unescape
+    let local_rel_unescaped = if local_rel_raw.is_empty() {
+        repo_name.to_string()
+    } else {
+        unescape_backslashes(&local_rel_raw)
+    };
+    
+    let gm_rel_unescaped = if gm_rel_raw.is_empty() {
+        repo_name.to_string()
+    } else {
+        unescape_backslashes(&gm_rel_raw)
+    };
+    
+    // Get directory values from config
+    let remote_dir = config.remote_dir.as_deref().unwrap_or("");
+    let local_dir = config.local_dir.as_deref().unwrap_or("");
+    let gm_dir = config.gm_dir.as_deref().unwrap_or("");
+    
+    // Construct full paths
+    let remote_path = cat_path(&[remote_dir, &remote_rel_unescaped]);
+    let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
+    let media_path = cat_path(&[gm_dir, &gm_rel_unescaped]);
+    
+    if get_operations().debug {
+        eprintln!("Potential target: {}", local_path);
+    }
+    
+    // Only process repositories in the current directory tree
+    let full_local_path = cat_path(&[&current_dir.to_string_lossy(), &local_path]);
+    if !full_local_path.contains(tree_filter) {
+        if get_operations().debug {
+            eprintln!("Skipping {} (outside current directory tree)", local_path);
+        }
+        return Ok(());
+    }
+    
+    // Process the repository
+    process_repo(config, &local_path, &remote_path, &media_path)
 }
 
 /// Split a line by separator character, respecting escaped separators
