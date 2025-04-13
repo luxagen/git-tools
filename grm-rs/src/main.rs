@@ -450,9 +450,6 @@ fn set_mode(config: &mut Config, mode: Mode) {
 }
 
 fn main() -> Result<()> {
-    // Initialize logging
-    env_logger::init();
-    
     // Parse command line arguments
     let args = Args::parse();
     
