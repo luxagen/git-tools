@@ -55,23 +55,17 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
     Err(anyhow!("Configuration file not found"))
 }
 
-/// Process a repository
-fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_path: &str) -> Result<()> {
-    // Get the current recurse prefix for path display
-    let recurse_prefix = &config.recurse_prefix;
-    
-    // Create prefixed paths - only apply prefix to local path, not remote
-    let prefixed_local_path = format!("{}{}", recurse_prefix, local_path);
-    
-    // Remote paths should NEVER have the recurse_prefix added
-    let remote_repo_path = get_remote_repo_path(config, remote_rel_path);
+/// Process a single repository
+fn process_repo(config: &Config, local_path: &str, remote_rel_path: Option<&str>, media_path: Option<&str>) -> Result<()> {
+    // Use the recurse prefix directly from the config
+    let prefixed_local_path = format!("{}{}", config.recurse_prefix, local_path);
     
     // Get operations
     let operations = get_operations();
     
     // Different behavior based on mode flags
     if operations.list_rrel {
-        println!("{}", remote_repo_path);
+        println!("{}", remote_rel_path.unwrap_or(""));
         return Ok(());
     }
     
@@ -91,6 +85,14 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         return Ok(());
     }
     
+    // Helper to avoid duplicating unwrap_or for media path
+    let configure_repo = |should_configure: bool| -> Result<()> {
+        if should_configure {
+            repository::configure_repo(local_path, media_path.unwrap_or(""), config)?;
+        }
+        Ok(())
+    };
+    
     // Get local path info
     let path = Path::new(local_path);
     
@@ -109,7 +111,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         
         // Clone, configure, and checkout
         repository::clone_repo_no_checkout(local_path, &get_remote_url(config, remote_rel_path))?;
-        repository::configure_repo(local_path, media_path, config)?;
+        configure_repo(true)?;
         repository::check_out(local_path)?;
         
         return Ok(());
@@ -144,9 +146,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
             repository::set_remote(local_path, &get_remote_url(config, remote_rel_path))?;
         }
         
-        if operations.configure {
-            repository::configure_repo(local_path, media_path, config)?;
-        }
+        configure_repo(operations.configure)?;
         
         if operations.git {
             // Execute git commands in the repository
@@ -168,14 +168,10 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     // that aren't git repositories yet, regardless of whether they're in .grm.repos
     
     // Only create a repository if the directory exists
-    if path.exists() {
-        // New mode for existing directory
+    if path.exists() && operations.new {
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
         
-        // Use the same helper function to get the remote repository path
-        let remote_repo_path = get_remote_repo_path(config, remote_rel_path);
-        
-        repository::create_new(local_path, &remote_repo_path, config)?;
+        repository::create_new(local_path, remote_rel_path, config)?;
         eprintln!("{} created", prefixed_local_path);
     } else {
         // Directory doesn't exist, just skip it
@@ -285,8 +281,8 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     };
     
     // Get directory values from config
-    let local_path = get_local_repo_path(config, &local_rel_unescaped);
-    let media_path = get_media_repo_path(config, &gm_rel_unescaped);
+    let local_path = get_local_repo_path(config, Some(&local_rel_unescaped));
+    let media_path = get_media_repo_path(config, Some(&gm_rel_unescaped));
     
     // Filter out repositories that are not in or below the current directory
     if let Some(tree_filter) = &config.tree_filter {
@@ -311,7 +307,7 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &local_path, &remote_rel_unescaped, &media_path) {
+    if let Err(err) = process_repo(config, &local_path, Some(&remote_rel_unescaped), Some(&media_path)) {
         eprintln!("Error processing {}: {}", &local_path, err);
     }
     
@@ -412,61 +408,63 @@ fn unescape_backslashes(s: &str) -> String {
     result
 }
 
-/// Generate a complete remote repository path by combining remote_dir and repo_path
-fn get_remote_repo_path(config: &Config, repo_path: &str) -> String {
-    // ONLY use remote_dir, NEVER use local_dir or gm_dir
-    let remote_dir = config.remote_dir.as_deref().unwrap_or("");
-    
-    if !remote_dir.is_empty() {
-        if !repo_path.is_empty() {
-            format!("{}/{}", remote_dir, repo_path)
-        } else {
-            remote_dir.to_string()
+/// Get remote repository path from config and relative path
+pub fn get_remote_repo_path(config: &Config, repo_path: Option<&str>) -> String {
+    if let Some(remote_dir) = config.remote_dir.as_deref() {
+        if !remote_dir.is_empty() {
+            if let Some(repo) = repo_path {
+                if !repo.is_empty() {
+                    return format!("{}/{}", remote_dir, repo);
+                }
+            }
+            return remote_dir.to_string();
         }
-    } else {
-        repo_path.to_string()
     }
+    
+    repo_path.unwrap_or("").to_string()
 }
 
 /// Generate a complete media repository path by combining gm_dir and repo_path
-pub fn get_media_repo_path(config: &Config, repo_path: &str) -> String {
-    let gm_dir = config.gm_dir.as_deref().unwrap_or("");
-    
-    if !gm_dir.is_empty() {
-        if !repo_path.is_empty() {
-            format!("{}/{}", gm_dir, repo_path)
-        } else {
-            gm_dir.to_string()
+pub fn get_media_repo_path(config: &Config, repo_path: Option<&str>) -> String {
+    if let Some(gm_dir) = config.gm_dir.as_deref() {
+        if !gm_dir.is_empty() {
+            if let Some(repo) = repo_path {
+                if !repo.is_empty() {
+                    return format!("{}/{}", gm_dir, repo);
+                }
+            }
+            return gm_dir.to_string();
         }
-    } else {
-        repo_path.to_string()
     }
+    
+    repo_path.unwrap_or("").to_string()
 }
 
 /// Generate a complete local repository path by combining local_dir and repo_path
-pub fn get_local_repo_path(config: &Config, repo_path: &str) -> String {
-    let local_dir = config.local_dir.as_deref().unwrap_or("");
-    
-    if !local_dir.is_empty() {
-        if !repo_path.is_empty() {
-            format!("{}/{}", local_dir, repo_path)
-        } else {
-            local_dir.to_string()
+pub fn get_local_repo_path(config: &Config, repo_path: Option<&str>) -> String {
+    if let Some(local_dir) = config.local_dir.as_deref() {
+        if !local_dir.is_empty() {
+            if let Some(repo) = repo_path {
+                if !repo.is_empty() {
+                    return format!("{}/{}", local_dir, repo);
+                }
+            }
+            return local_dir.to_string();
         }
-    } else {
-        repo_path.to_string()
     }
+    
+    repo_path.unwrap_or("").to_string()
 }
 
 /// Get formatted remote URL based on configuration and remote relative path
-fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
+fn get_remote_url(config: &Config, remote_rel_path: Option<&str>) -> String {
     // Get the base path, defaulting to empty string if not set
     let base_path = config.rpath_base.as_deref().unwrap_or("");
     
-    // Get the complete repository path
+    // Use the remote repo path function to handle paths consistently
     let full_repo_path = get_remote_repo_path(config, remote_rel_path);
     
-    // Then use our remote_url module to build the URL with login and combined path
+    // Choose URL format based on configuration
     match &config.rlogin {
         Some(login) if !login.is_empty() => {
             // We have login information
