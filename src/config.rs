@@ -263,8 +263,15 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
             cell.push(escaped);
             // Advance past the escaped character
             input = &input[escaped.len_utf8()..];
-        } else if c == '\n' {
-            // Found a newline - don't include it in the cell
+        } else if c == '\n' || c == '\r' {
+            // Found a newline (LF or CR)
+            
+            // Handle CRLF by consuming the LF if this is CR followed by LF
+            if c == '\r' && input.starts_with('\n') {
+                input = &input['\n'.len_utf8()..];
+            }
+            
+            // Don't include the line break in the cell
             break;
         } else {
             // Normal character - add it to the cell
