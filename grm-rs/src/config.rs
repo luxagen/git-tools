@@ -249,6 +249,7 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     // Start building the cell content
     let mut cell = String::new();
     let mut input = input;
+    let mut rtrim_pos = 0;
     
     // Process one character at a time, handling escapes
     while let Some(c) = input.chars().next() {
@@ -261,6 +262,8 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
             let escaped = input.chars().next().unwrap();
             // Add the escaped character to the cell (not the backslash)
             cell.push(escaped);
+            // Any escaped character is considered non-whitespace for trimming purposes
+            rtrim_pos = cell.len();
             // Advance past the escaped character
             input = &input[escaped.len_utf8()..];
         } else if c == '\r' {
@@ -279,15 +282,16 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
         } else {
             // Normal character - add it to the cell
             cell.push(c);
+            // Update right trim position if this isn't whitespace
+            if !c.is_whitespace() {
+                rtrim_pos = cell.len();
+            }
         }
     }
 
-    // NEXT: track last non-WS?
-
-    // Trim trailing whitespace in-place
-    let trimmed_len = cell.trim_end().len();
-    cell.truncate(trimmed_len);
+    // Truncate to the right trim position (after the last non-whitespace)
+    cell.truncate(rtrim_pos);
     
-    // Return the cell directly, without additional copying
+    // Return the cell directly, without additional scanning or copying
     (Some(cell), input)
 }
