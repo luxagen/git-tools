@@ -358,6 +358,13 @@ pub fn parse_line(input: &str) -> (Vec<String>, &str) {
         
         let (cell, new_remainder) = parse_cell(remainder);
         
+        // Check if this cell is a comment
+        if cell.starts_with('#') {
+            // For comments, skip to end of line (or input)
+            remainder = slice_to_eol(new_remainder);
+            break;
+        }
+        
         // Add the cell to our vector
         cells.push(cell);
         
@@ -386,4 +393,16 @@ pub fn parse_line(input: &str) -> (Vec<String>, &str) {
     }
     
     (cells, remainder)
+}
+
+/// Slice a string from the current position to the end of the line
+/// Returns a substring from the current position to the next line ending character,
+/// or an empty slice at the end of the string if no line ending is found.
+fn slice_to_eol(input: &str) -> &str {
+    for (i, c) in input.char_indices() {
+        if c == '\r' || c == '\n' {
+            return &input[i..];
+        }
+    }
+    &input[input.len()..]
 }
