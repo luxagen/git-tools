@@ -241,72 +241,16 @@ struct ShellCommand {
 
 /// Detect what shell to use based on environment
 fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
-    // First, try to use explicit shell environment variables
+    // First, try to use the SHELL environment variable
     if let Ok(shell_path) = std::env::var("SHELL") {
-        // User has a SHELL variable defined, use it
-        let shell_name = Path::new(&shell_path)
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("sh");
-            
-        // Check if it's a known shell and use appropriate args
-        if shell_name.contains("bash") || shell_name == "sh" {
-            return Ok(ShellCommand {
-                executable: shell_path,
-                args: vec!["-c".to_string(), cmd.to_string()],
-            });
-        } else if shell_name.contains("zsh") {
-            return Ok(ShellCommand {
-                executable: shell_path,
-                args: vec!["-c".to_string(), cmd.to_string()],
-            });
-        } else if shell_name.contains("fish") {
-            return Ok(ShellCommand {
-                executable: shell_path,
-                args: vec!["-c".to_string(), cmd.to_string()],
-            });
-        }
-    }
-    
-    // Look for Git Bash on Windows
-    if cfg!(windows) {
-        // Check common Git Bash locations
-        let git_bash_locations = [
-            r"C:\Program Files\Git\bin\bash.exe",
-            r"C:\Program Files (x86)\Git\bin\bash.exe",
-        ];
-        
-        for path in git_bash_locations.iter() {
-            if Path::new(path).exists() {
-                return Ok(ShellCommand {
-                    executable: path.to_string(),
-                    args: vec!["-c".to_string(), cmd.to_string()],
-                });
-            }
-        }
-        
-        // Check if bash is in PATH
-        if let Ok(output) = Command::new("where").arg("bash").output() {
-            if output.status.success() && !output.stdout.is_empty() {
-                // Convert stdout to string first to fix the borrowing issue
-                let output_str = String::from_utf8_lossy(&output.stdout).to_string();
-                let bash_path = output_str.lines().next().unwrap_or("bash").trim();
-                
-                return Ok(ShellCommand {
-                    executable: bash_path.to_string(),
-                    args: vec!["-c".to_string(), cmd.to_string()],
-                });
-            }
-        }
-        
-        // If all else fails on Windows, try PowerShell
+        // User has a SHELL variable defined, use it directly
         return Ok(ShellCommand {
-            executable: "powershell".to_string(),
-            args: vec!["-Command".to_string(), cmd.to_string()],
+            executable: shell_path,
+            args: vec!["-c".to_string(), cmd.to_string()],
         });
     }
     
-    // Default for Unix platforms
+    // Default for all platforms if SHELL is not set
     Ok(ShellCommand {
         executable: "sh".to_string(),
         args: vec!["-c".to_string(), cmd.to_string()],
