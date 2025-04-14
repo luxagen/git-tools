@@ -209,3 +209,65 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
     
     Some((key.to_string(), value.to_string()))
 }
+
+/// Parse a cell (column) from a line in the config/repos file.
+/// Returns a tuple containing:
+/// - Option<String>: The parsed cell content trimmed of whitespace (if found)
+/// - &str: The remaining unparsed portion of the input string
+///
+/// The function works by:
+/// - Skipping leading whitespace
+/// - Collecting characters until a newline or end of string is encountered
+/// - Trimming trailing whitespace from the right of the parsed string
+pub fn parse_cell(input: &str) -> (Option<String>, &str) {
+    // Skip leading whitespace
+    let mut pos = 0;
+    let mut chars = input.chars();
+    
+    while let Some(c) = chars.next() {
+        if c == '\n' {
+            // Found newline while skipping whitespace, return None and the rest
+            return (None, &input[(pos + 1)..]);
+        } else if !c.is_whitespace() {
+            // Found non-whitespace character, start collecting from here
+            break;
+        }
+        pos += c.len_utf8();
+    }
+    
+    if pos >= input.len() {
+        // Reached end of string while skipping whitespace
+        return (None, "");
+    }
+    
+    // Collect characters until newline or end of string
+    let start = pos;
+    let mut end = start;
+    
+    for c in input[start..].chars() {
+        if c == '\n' {
+            // Found newline, don't include it in result
+            break;
+        }
+        end += c.len_utf8();
+    }
+    
+    // Extract the cell content and remaining input
+    let cell_content = input[start..end].to_string();
+    let remaining = if end < input.len() {
+        // If we stopped at a newline, skip past it
+        if input.as_bytes().get(end) == Some(&b'\n') {
+            &input[(end + 1)..]
+        } else {
+            &input[end..]
+        }
+    } else {
+        // Reached end of string
+        ""
+    };
+    
+    // Trim right whitespace from cell content
+    let trimmed = cell_content.trim_end().to_string();
+    
+    (Some(trimmed), remaining)
+}
