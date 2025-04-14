@@ -224,23 +224,22 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     
     // Skip leading whitespace
     loop {
-        if remainder.is_empty() {
-            // Reached end of string without finding non-whitespace
+        if let Some(c) = remainder.chars().next() {
+            if !c.is_whitespace() {
+                // Found non-whitespace character
+                break;
+            }
+            
+            // Skip this whitespace character
+            remainder = &remainder[c.len_utf8()..];
+            
+            if c == '\n' {
+                // Found newline while skipping whitespace
+                return (None, remainder);
+            }
+        } else {
+            // Empty string
             return (None, "");
-        }
-        
-        let c = remainder.chars().next().unwrap();
-        if !c.is_whitespace() {
-            // Found non-whitespace character
-            break;
-        }
-        
-        // Skip this whitespace character
-        remainder = &remainder[c.len_utf8()..];
-        
-        if c == '\n' {
-            // Found newline while skipping whitespace
-            return (None, remainder);
         }
     }
     
