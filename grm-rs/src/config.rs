@@ -215,18 +215,18 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
 /// If a newline is encountered while skipping whitespace, returns (None, remainder_after_newline)
 /// If the string is empty or contains only whitespace, returns (None, "")
 fn skip_whitespace(input: &str) -> (Option<()>, &str) {
-    let mut remainder = input;
+    let mut input = input;
     
     // Skip leading whitespace until we find non-whitespace or newline
     loop {
-        match remainder.chars().next() {
+        match input.chars().next() {
             // Found whitespace
             Some(c) if c.is_whitespace() => {
                 // Skip this whitespace character
-                remainder = &remainder[c.len_utf8()..];
+                input = &input[c.len_utf8()..];
                 // Return immediately if it was a newline
                 if c == '\n' {
-                    return (None, remainder);
+                    return (None, input);
                 }
             },
             // Anything else - break out of the loop
@@ -234,11 +234,11 @@ fn skip_whitespace(input: &str) -> (Option<()>, &str) {
         }
     }
     
-    // At this point, either remainder starts with non-whitespace or is empty
-    if remainder.is_empty() {
+    // At this point, either input starts with non-whitespace or is empty
+    if input.is_empty() {
         (None, "")
     } else {
-        (Some(()), remainder)
+        (Some(()), input)
     }
 }
 
@@ -253,30 +253,30 @@ fn skip_whitespace(input: &str) -> (Option<()>, &str) {
 /// - Trimming trailing whitespace from the right of the parsed string
 pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     // Skip leading whitespace
-    let (ws_result, remainder) = skip_whitespace(input);
+    let (ws_result, input) = skip_whitespace(input);
     
     // If we hit a newline or empty string while skipping whitespace
     if ws_result.is_none() {
-        return (None, remainder);
+        return (None, input);
     }
     
     // Start building the cell content
     let mut cell = String::new();
-    let mut remainder = remainder;
+    let mut input = input;
     
     // Process one character at a time, handling escapes
-    while let Some(c) = remainder.chars().next() {
-        // Remove the current character from remainder
-        remainder = &remainder[c.len_utf8()..];
+    while let Some(c) = input.chars().next() {
+        // Remove the current character from input
+        input = &input[c.len_utf8()..];
         
         // Handle escaping
-        if c == '\\' && !remainder.is_empty() {
+        if c == '\\' && !input.is_empty() {
             // Get the escaped character
-            let escaped = remainder.chars().next().unwrap();
+            let escaped = input.chars().next().unwrap();
             // Add the escaped character to the cell (not the backslash)
             cell.push(escaped);
             // Advance past the escaped character
-            remainder = &remainder[escaped.len_utf8()..];
+            input = &input[escaped.len_utf8()..];
         } else if c == '\n' {
             // Found a newline - don't include it in the cell
             break;
@@ -287,5 +287,5 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     }
     
     // Return the cell with trailing whitespace trimmed, and the remaining input
-    (Some(cell.trim_end().to_string()), remainder)
+    (Some(cell.trim_end().to_string()), input)
 }
