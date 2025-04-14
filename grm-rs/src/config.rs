@@ -252,37 +252,34 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     let mut rtrim_pos = 0;
     
     // Process one character at a time, handling escapes
-    while let Some(c) = input.chars().next() {
-        // Remove the current character from input
+    while !input.is_empty() {
+        // First check for line endings without consuming them
+        if input.starts_with('\r') || input.starts_with('\n') {
+            break;
+        }
+        
+        // Get the next character
+        let c = input.chars().next().unwrap();
+        
+        // Advance past the current character
         input = &input[c.len_utf8()..];
         
         // Handle escaping
         if c == '\\' && !input.is_empty() {
             // Get the escaped character
             let escaped = input.chars().next().unwrap();
-            // Add the escaped character to the cell (not the backslash)
+            
+            // Add the escaped character to the cell
             cell.push(escaped);
-            // Any escaped character is considered non-whitespace for trimming purposes
-            rtrim_pos = cell.len();
+            rtrim_pos = cell.len(); // Escaped chars are never trimmed
+            
             // Advance past the escaped character
             input = &input[escaped.len_utf8()..];
-        } else if c == '\r' {
-            // Found CR (possibly part of CRLF)
-            
-            // Handle CRLF by consuming the LF if followed by LF
-            if input.starts_with('\n') {
-                input = &input['\n'.len_utf8()..];
-            }
-            
-            // Don't include the line break in the cell
-            break;
-        } else if c == '\n' {
-            // Found LF on its own
-            break;
         } else {
-            // Normal character - add it to the cell
+            // Add to cell
             cell.push(c);
-            // Update right trim position if this isn't whitespace
+            
+            // Update right trim position if not whitespace
             if !c.is_whitespace() {
                 rtrim_pos = cell.len();
             }
