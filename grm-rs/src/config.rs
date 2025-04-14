@@ -235,14 +235,13 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
             break;
         }
         
-        if c == '\n' {
-            // Found newline while skipping whitespace
-            remainder = &remainder[c.len_utf8()..];
-            return (None, remainder);
-        }
-        
         // Skip this whitespace character
         remainder = &remainder[c.len_utf8()..];
+        
+        if c == '\n' {
+            // Found newline while skipping whitespace
+            return (None, remainder);
+        }
     }
     
     // Find the position of the first newline (if any)
