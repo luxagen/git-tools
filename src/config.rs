@@ -216,7 +216,7 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
 /// - &str: The remaining unparsed portion of the input string
 ///
 /// The function works by:
-/// - Skipping leading whitespace
+/// - Skipping leading whitespace until a newline or end of string is encountered
 /// - Collecting characters until a newline or end of string is encountered
 /// - Trimming trailing whitespace from the right of the parsed string
 pub fn parse_cell(input: &str) -> (Option<String>, &str) {
@@ -225,20 +225,23 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     // Skip leading whitespace until we find non-whitespace or newline
     loop {
         match remainder.chars().next() {
-            // Found a non-whitespace character 
-            Some(c) if !c.is_whitespace() => break,
-            
-            // Found a newline or other whitespace
-            Some(c) => {
+            // Found whitespace
+            Some(c) if c.is_whitespace() => {
+                // Skip this whitespace character
                 remainder = &remainder[c.len_utf8()..];
+                // Return immediately if it was a newline
                 if c == '\n' {
                     return (None, remainder);
                 }
             },
-            
-            // End of string
-            None => return (None, ""),
+            // Anything else - break out of the loop
+            _ => break,
         }
+    }
+    
+    // At this point, either remainder starts with non-whitespace or is empty
+    if remainder.is_empty() {
+        return (None, "");
     }
     
     // Find the position of the first newline (if any)
