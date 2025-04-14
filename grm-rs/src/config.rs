@@ -186,37 +186,6 @@ impl Config {
     }
 }
 
-/// Parse a configuration line
-fn parse_config_line(line: &str) -> Option<(String, String)> {
-    let line = line.trim();
-    
-    // Skip empty lines and comments
-    if line.is_empty() || line.starts_with('#') {
-        return None;
-    }
-    
-    // Split by the first non-whitespace character
-    let parts: Vec<&str> = line.splitn(3, LIST_SEPARATOR).collect();
-    
-    if parts.len() < 3 {
-        return None;
-    }
-    
-    // First part should be empty or just whitespace
-    let first = parts[0].trim();
-    if !first.is_empty() {
-        return None;
-    }
-    
-    // Second part is the key
-    let key = parts[1].trim();
-    
-    // Third part is the value
-    let value = parts[2].trim();
-    
-    Some((key.to_string(), value.to_string()))
-}
-
 /// Skip leading whitespace in the input string (excluding CR and LF).
 /// Returns the remaining string starting at the first non-whitespace character, newline, or end of string
 fn skip_whitespace(input: &str) -> &str {
