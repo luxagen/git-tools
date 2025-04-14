@@ -281,7 +281,13 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
             cell.push(c);
         }
     }
+
+    // NEXT: track last non-WS?
+
+    // Trim trailing whitespace in-place
+    let trimmed_len = cell.trim_end().len();
+    cell.truncate(trimmed_len);
     
-    // Return the cell with trailing whitespace trimmed, and the remaining input
-    (Some(cell.trim_end().to_string()), input)
+    // Return the cell directly, without additional copying
+    (Some(cell), input)
 }
