@@ -244,22 +244,26 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
         return (None, "");
     }
     
-    // Find the position of the first newline (if any)
-    match remainder.find('\n') {
-        Some(pos) => {
-            // Return substring up to newline (trimmed) and rest after newline
-            let content = remainder[..pos].trim_end();
-            let rest = if pos + 1 < remainder.len() {
-                &remainder[pos + 1..]
-            } else {
-                ""
-            };
-            (Some(content.to_string()), rest)
+    // Parse the content until a newline or end of string
+    let mut pos = 0;
+    let mut found_newline = false;
+    
+    for c in remainder.chars() {
+        if c == '\n' {
+            found_newline = true;
+            break;
         }
-        None => {
-            // No newline found, process the entire string
-            let content = remainder.trim_end();
-            (Some(content.to_string()), "")
-        }
+        pos += c.len_utf8();
+    }
+    
+    // Extract content and remaining input
+    if found_newline {
+        let content = remainder[..pos].trim_end();
+        let rest = &remainder[(pos + '\n'.len_utf8())..];
+        (Some(content.to_string()), rest)
+    } else {
+        // No newline found, process the entire string
+        let content = remainder.trim_end();
+        (Some(content.to_string()), "")
     }
 }
