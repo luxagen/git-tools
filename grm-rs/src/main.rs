@@ -286,7 +286,6 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     
     // Get directory values from config
     let local_dir = config.local_dir.as_deref().unwrap_or("");
-    let gm_dir = config.gm_dir.as_deref().unwrap_or("");
     
     // Construct full paths
     let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
