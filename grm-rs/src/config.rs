@@ -226,7 +226,7 @@ fn skip_whitespace(input: &str) -> &str {
 /// A tuple containing:
 /// - The parsed cell as a String (may be empty)
 /// - The remaining unparsed portion of the input
-pub fn parse_cell(input: &str) -> (String, &str) {
+pub fn parse_config_cell(input: &str) -> (String, &str) {
     // Skip leading whitespace
     let input = skip_whitespace(input);
     
@@ -300,14 +300,14 @@ pub fn parse_cell(input: &str) -> (String, &str) {
 /// A tuple containing:
 /// - Vector of parsed cells (may include empty strings)
 /// - The remaining unparsed portion of the input (after consuming line ending if present)
-pub fn parse_line(input: &str) -> (Vec<String>, &str) {
+pub fn parse_config_line(input: &str) -> (Vec<String>, &str) {
     // Skip empty lines
     if input.is_empty() {
         return (Vec::new(), input);
     }
     
     // Parse the first cell to check for comments (this will skip whitespace)
-    let (first_cell, first_remainder) = parse_cell(input);
+    let (first_cell, first_remainder) = parse_config_cell(input);
     
     // Check if it's a comment after skipping whitespace
     if first_cell.starts_with('#') {
@@ -330,7 +330,7 @@ pub fn parse_line(input: &str) -> (Vec<String>, &str) {
         // Skip past the separator and continue parsing
         remainder = &remainder[LIST_SEPARATOR.len_utf8()..];
         
-        let (cell, new_remainder) = parse_cell(remainder);
+        let (cell, new_remainder) = parse_config_cell(remainder);
         
         // Check if this cell is a comment
         if cell.starts_with('#') {
