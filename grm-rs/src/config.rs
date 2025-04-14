@@ -31,6 +31,8 @@ pub struct Config {
     pub config_cmd: Option<String>,
     /// Recurse prefix for path display
     pub recurse_prefix: String,
+    /// Tree filter path for filtering repositories to current subtree
+    pub tree_filter: Option<String>,
 }
 
 impl Config {
@@ -49,6 +51,7 @@ impl Config {
             git_args: None,
             config_cmd: None,
             recurse_prefix: String::new(),
+            tree_filter: None,
         }
     }
     
@@ -95,6 +98,10 @@ impl Config {
         
         if !self.recurse_prefix.is_empty() {
             result.push(("RECURSE_PREFIX".to_string(), self.recurse_prefix.clone()));
+        }
+        
+        if let Some(ref v) = self.tree_filter {
+            result.push(("TREE_FILTER".to_string(), v.clone()));
         }
         
         result
@@ -159,6 +166,7 @@ impl Config {
             "GIT_ARGS" => self.git_args = Some(value),
             "CONFIG_CMD" => self.config_cmd = Some(value),
             "RECURSE_PREFIX" => self.recurse_prefix = value,
+            "TREE_FILTER" => self.tree_filter = Some(value),
             _ => {} // Ignore unknown keys
         }
     }
