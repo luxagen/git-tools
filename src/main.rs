@@ -444,10 +444,8 @@ pub fn get_media_repo_path(config: &Config, repo_path: Option<&str>) -> String {
 pub fn get_local_repo_path(config: &Config, repo_path: Option<&str>) -> String {
     if let Some(local_dir) = config.local_dir.as_deref() {
         if !local_dir.is_empty() {
-            if let Some(repo) = repo_path {
-                if !repo.is_empty() {
-                    return format!("{}/{}", local_dir, repo);
-                }
+            if let Some(repo) = repo_path.filter(|s| !s.is_empty()) {
+                return format!("{}/{}", local_dir, repo);
             }
             return local_dir.to_string();
         }
