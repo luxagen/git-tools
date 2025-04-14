@@ -327,6 +327,11 @@ pub fn parse_cell(input: &str) -> (String, &str) {
 /// - Vector of parsed cells (may include empty strings)
 /// - The remaining unparsed portion of the input (after consuming line ending if present)
 pub fn parse_line(input: &str) -> (Vec<String>, &str) {
+    // Skip empty lines and comments
+    if input.is_empty() || input.starts_with('#') {
+        return (Vec::new(), input);
+    }
+    
     let mut cells = Vec::new();
     let mut remainder = input;
     
