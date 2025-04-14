@@ -289,6 +289,15 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     
     // Construct full paths
     let local_path = cat_path(&[local_dir, &local_rel_unescaped]);
+    
+    // Filter out repositories that are not in or below the current directory
+    if let Some(tree_filter) = &config.tree_filter {
+        if !local_path.starts_with(tree_filter) {
+            eprintln!("Skipping repository outside of tree filter: {}", local_path);
+            return Ok(());
+        }
+    }
+    
     let media_path = get_media_repo_path(config, &gm_rel_unescaped);
     
     if get_operations().debug {
@@ -453,6 +462,9 @@ fn main() -> Result<()> {
     // Set MSYS_NO_PATHCONV=1 to prevent Windows Git path conversion issues
     std::env::set_var("MSYS_NO_PATHCONV", "1");
     
+    // Save the original working directory to use as a tree filter
+    let tree_filter = env::current_dir()?;
+    
     // Parse command line arguments
     let args = Args::parse();
     
@@ -478,6 +490,9 @@ fn main() -> Result<()> {
     // Get listfile directory and path
     let list_dir = find_listfile_dir(&config)?;
     let list_path = list_dir.join(&config.list_filename);
+    
+    // Add the tree_filter to the config for repository filtering
+    config.tree_filter = Some(tree_filter.to_string_lossy().to_string());
     
     // Process listfile
     if list_path.exists() {
