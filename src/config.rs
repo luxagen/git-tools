@@ -220,54 +220,47 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
 /// - Collecting characters until a newline or end of string is encountered
 /// - Trimming trailing whitespace from the right of the parsed string
 pub fn parse_cell(input: &str) -> (Option<String>, &str) {
+    let mut remainder = input;
+    
     // Skip leading whitespace
-    let mut pos = 0;
-    let mut chars = input.chars();
-    
-    while let Some(c) = chars.next() {
-        if c == '\n' {
-            // Found newline while skipping whitespace, return None and the rest
-            return (None, &input[(pos + 1)..]);
-        } else if !c.is_whitespace() {
-            // Found non-whitespace character, start collecting from here
+    loop {
+        if remainder.is_empty() {
+            // Reached end of string without finding non-whitespace
+            return (None, "");
+        }
+        
+        let c = remainder.chars().next().unwrap();
+        if !c.is_whitespace() {
+            // Found non-whitespace character
             break;
         }
-        pos += c.len_utf8();
-    }
-    
-    if pos >= input.len() {
-        // Reached end of string while skipping whitespace
-        return (None, "");
-    }
-    
-    // Collect characters until newline or end of string
-    let start = pos;
-    let mut end = start;
-    
-    for c in input[start..].chars() {
+        
         if c == '\n' {
-            // Found newline, don't include it in result
-            break;
+            // Found newline while skipping whitespace
+            remainder = &remainder[c.len_utf8()..];
+            return (None, remainder);
         }
-        end += c.len_utf8();
+        
+        // Skip this whitespace character
+        remainder = &remainder[c.len_utf8()..];
     }
     
-    // Extract the cell content and remaining input
-    let cell_content = input[start..end].to_string();
-    let remaining = if end < input.len() {
-        // If we stopped at a newline, skip past it
-        if input.as_bytes().get(end) == Some(&b'\n') {
-            &input[(end + 1)..]
-        } else {
-            &input[end..]
+    // Find the position of the first newline (if any)
+    match remainder.find('\n') {
+        Some(pos) => {
+            // Return substring up to newline (trimmed) and rest after newline
+            let content = remainder[..pos].trim_end();
+            let rest = if pos + 1 < remainder.len() {
+                &remainder[pos + 1..]
+            } else {
+                ""
+            };
+            (Some(content.to_string()), rest)
         }
-    } else {
-        // Reached end of string
-        ""
-    };
-    
-    // Trim right whitespace from cell content
-    let trimmed = cell_content.trim_end().to_string();
-    
-    (Some(trimmed), remaining)
+        None => {
+            // No newline found, process the entire string
+            let content = remainder.trim_end();
+            (Some(content.to_string()), "")
+        }
+    }
 }
