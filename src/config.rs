@@ -327,16 +327,35 @@ pub fn parse_cell(input: &str) -> (String, &str) {
 /// - Vector of parsed cells (may include empty strings)
 /// - The remaining unparsed portion of the input (after consuming line ending if present)
 pub fn parse_line(input: &str) -> (Vec<String>, &str) {
-    // Skip empty lines and comments
-    if input.is_empty() || input.starts_with('#') {
+    // Skip empty lines
+    if input.is_empty() {
         return (Vec::new(), input);
     }
     
+    // Parse the first cell to check for comments (this will skip whitespace)
+    let (first_cell, first_remainder) = parse_cell(input);
+    
+    // Check if it's a comment after skipping whitespace
+    if first_cell.starts_with('#') {
+        return (Vec::new(), input);
+    }
+    
+    // Start building cells with the first cell we already parsed
     let mut cells = Vec::new();
-    let mut remainder = input;
+    cells.push(first_cell);
+    
+    let mut remainder = first_remainder;
     
     // Parse cells until we can't make progress
     loop {
+        // Check if we're at a separator 
+        if !remainder.starts_with(LIST_SEPARATOR) {
+            break;
+        }
+        
+        // Skip past the separator and continue parsing
+        remainder = &remainder[LIST_SEPARATOR.len_utf8()..];
+        
         let (cell, new_remainder) = parse_cell(remainder);
         
         // Add the cell to our vector
@@ -347,15 +366,7 @@ pub fn parse_line(input: &str) -> (Vec<String>, &str) {
             break;
         }
         
-        // Check if we're at a separator 
-        if !new_remainder.starts_with(LIST_SEPARATOR) {
-            // No separator, update remainder to point after the cell
-            remainder = new_remainder;
-            break;
-        }
-        
-        // Skip past the separator and continue parsing
-        remainder = &new_remainder[LIST_SEPARATOR.len_utf8()..];
+        remainder = new_remainder;
     }
     
     // Handle line endings
