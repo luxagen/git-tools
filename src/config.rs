@@ -210,35 +210,21 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
     Some((key.to_string(), value.to_string()))
 }
 
-/// Skip leading whitespace in the input string.
-/// Returns the remaining string starting at the first non-whitespace character.
-/// If a newline is encountered while skipping whitespace, returns (None, remainder_after_newline)
-/// If the string is empty or contains only whitespace, returns (None, "")
-fn skip_whitespace(input: &str) -> (Option<()>, &str) {
+/// Skip leading whitespace in the input string (excluding CR and LF).
+/// Returns the remaining string starting at the first non-whitespace character, newline, or end of string
+fn skip_whitespace(input: &str) -> &str {
     let mut input = input;
     
-    // Skip leading whitespace until we find non-whitespace or newline
+    // Skip leading whitespace (excluding CR and LF) until we find non-whitespace or newline
     loop {
-        match input.chars().next() {
-            // Found whitespace
-            Some(c) if c.is_whitespace() => {
-                // Skip this whitespace character
-                input = &input[c.len_utf8()..];
-                // Return immediately if it was a newline
-                if c == '\n' {
-                    return (None, input);
-                }
+        input = match input.chars().next() {
+            // Found regular whitespace (not CR or LF)
+            Some(c) if c.is_whitespace() && c != '\r' && c != '\n' => {
+                &input[c.len_utf8()..]
             },
-            // Anything else - break out of the loop
-            _ => break,
-        }
-    }
-    
-    // At this point, either input starts with non-whitespace or is empty
-    if input.is_empty() {
-        (None, "")
-    } else {
-        (Some(()), input)
+            // Found CR, LF, other non-whitespace, or end of string
+            _ => return input,
+        };
     }
 }
 
@@ -253,10 +239,10 @@ fn skip_whitespace(input: &str) -> (Option<()>, &str) {
 /// - Trimming trailing whitespace from the right of the parsed string
 pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     // Skip leading whitespace
-    let (ws_result, input) = skip_whitespace(input);
+    let input = skip_whitespace(input);
     
-    // If we hit a newline or empty string while skipping whitespace
-    if ws_result.is_none() {
+    // If we hit a newline, CR, or empty string while skipping whitespace
+    if input.is_empty() || input.starts_with('\n') || input.starts_with('\r') {
         return (None, input);
     }
     
