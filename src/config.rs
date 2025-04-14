@@ -292,3 +292,51 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     // Return the cell directly, without additional scanning or copying
     (Some(cell), input)
 }
+
+/// Parse a line into a vector of cell options and the remaining unparsed portion.
+/// Returns a vector containing Option<String> for each attempted cell parse, and the
+/// remaining input after parsing stopped.
+/// Each Option<String> indicates whether that particular cell was successfully parsed.
+/// The function stops parsing when it encounters a cell that can't be parsed
+/// (returning None for that position) or when it reaches the end of the input.
+/// Any line endings (CR, LF, or CRLF) at the end of the line are consumed.
+pub fn parse_line(input: &str) -> (Vec<Option<String>>, &str) {
+    let mut cells = Vec::new();
+    let mut remainder = input;
+    
+    // Parse cells until we can't
+    loop {
+        let (cell, new_remainder) = parse_cell(remainder);
+        
+        // Check if cell is None before we move it
+        let is_none = cell.is_none();
+        
+        // Add the cell (either Some or None) to our vector
+        cells.push(cell);
+        
+        // If we couldn't make progress (EOL/EOF), stop parsing cells
+        if is_none || remainder == new_remainder {
+            break;
+        }
+        
+        remainder = new_remainder;
+    }
+    
+    // Handle line endings
+    match remainder.chars().next() {
+        None => {} // EOF
+        Some('\r') => { // CR or CRLF
+            remainder = &remainder['\r'.len_utf8()..];
+            // If CRLF, consume the LF too
+            if remainder.starts_with('\n') {
+                remainder = &remainder['\n'.len_utf8()..];
+            }
+        }
+        Some('\n') => { // Just LF
+            remainder = &remainder['\n'.len_utf8()..];
+        }
+        _ => {} // No line ending but we're done parsing cells
+    }
+    
+    (cells, remainder)
+}
