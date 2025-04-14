@@ -4,6 +4,8 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 
+use crate::LIST_SEPARATOR;
+
 /// Typed configuration values with proper types for each setting
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -189,7 +191,7 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
     }
     
     // Split by the first non-whitespace character
-    let parts: Vec<&str> = line.splitn(3, '*').collect();
+    let parts: Vec<&str> = line.splitn(3, LIST_SEPARATOR).collect();
     
     if parts.len() < 3 {
         return None;
@@ -228,22 +230,35 @@ fn skip_whitespace(input: &str) -> &str {
     }
 }
 
-/// Parse a cell (column) from a line in the config/repos file.
-/// Returns a tuple containing:
-/// - Option<String>: The parsed cell content trimmed of whitespace (if found)
-/// - &str: The remaining unparsed portion of the input string
+/// Parse a single cell from a configuration or repository file line.
+/// 
+/// This function handles several important aspects of parsing:
+/// - Skips leading whitespace
+/// - Handles escaped characters (e.g., `\*` doesn't separate fields)
+/// - Preserves escaped whitespace 
+/// - Stops at unescaped line endings (CR, LF) or separator characters
+/// - Trims trailing whitespace from the right
 ///
-/// The function works by:
-/// - Skipping leading whitespace until a newline or end of string is encountered
-/// - Collecting characters until a newline or end of string is encountered
-/// - Trimming trailing whitespace from the right of the parsed string
-pub fn parse_cell(input: &str) -> (Option<String>, &str) {
+/// If the cell cannot be parsed (empty input, immediate delimiter, etc.), 
+/// an empty string is returned.
+///
+/// Note: Escaped whitespace (e.g., `\ `) is preserved and never trimmed, only unescaped
+/// trailing whitespace is removed.
+///
+/// # Arguments
+/// - `input`: The input string to parse
+///
+/// # Returns
+/// A tuple containing:
+/// - The parsed cell as a String (may be empty)
+/// - The remaining unparsed portion of the input
+pub fn parse_cell(input: &str) -> (String, &str) {
     // Skip leading whitespace
     let input = skip_whitespace(input);
     
-    // If we hit a newline, CR, or empty string while skipping whitespace
-    if input.is_empty() || input.starts_with('\n') || input.starts_with('\r') {
-        return (None, input);
+    // If we hit a newline, CR, separator, or empty string while skipping whitespace
+    if input.is_empty() || input.starts_with('\n') || input.starts_with('\r') || input.starts_with(LIST_SEPARATOR) {
+        return (String::new(), input);
     }
     
     // Start building the cell content
@@ -253,8 +268,8 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     
     // Process one character at a time, handling escapes
     while !input.is_empty() {
-        // First check for line endings without consuming them
-        if input.starts_with('\r') || input.starts_with('\n') {
+        // First check for line endings or separator character without consuming them
+        if input.starts_with('\r') || input.starts_with('\n') || input.starts_with(LIST_SEPARATOR) {
             break;
         }
         
@@ -290,36 +305,52 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     cell.truncate(rtrim_pos);
     
     // Return the cell directly, without additional scanning or copying
-    (Some(cell), input)
+    (cell, input)
 }
 
-/// Parse a line into a vector of cell options and the remaining unparsed portion.
-/// Returns a vector containing Option<String> for each attempted cell parse, and the
+/// Parse a line into a vector of cells and the remaining unparsed portion.
+/// Returns a vector containing each parsed cell and the
 /// remaining input after parsing stopped.
-/// Each Option<String> indicates whether that particular cell was successfully parsed.
-/// The function stops parsing when it encounters a cell that can't be parsed
-/// (returning None for that position) or when it reaches the end of the input.
+/// 
+/// The function stops parsing when:
+/// - It reaches the end of the input
+/// - It can't make progress (current position doesn't change after parsing)
+/// - It encounters a delimiter or line ending
+///
 /// Any line endings (CR, LF, or CRLF) at the end of the line are consumed.
-pub fn parse_line(input: &str) -> (Vec<Option<String>>, &str) {
+///
+/// # Arguments
+/// - `input`: The input string to parse
+///
+/// # Returns
+/// A tuple containing:
+/// - Vector of parsed cells (may include empty strings)
+/// - The remaining unparsed portion of the input (after consuming line ending if present)
+pub fn parse_line(input: &str) -> (Vec<String>, &str) {
     let mut cells = Vec::new();
     let mut remainder = input;
     
-    // Parse cells until we can't
+    // Parse cells until we can't make progress
     loop {
         let (cell, new_remainder) = parse_cell(remainder);
         
-        // Check if cell is None before we move it
-        let is_none = cell.is_none();
-        
-        // Add the cell (either Some or None) to our vector
+        // Add the cell to our vector
         cells.push(cell);
         
-        // If we couldn't make progress (EOL/EOF), stop parsing cells
-        if is_none || remainder == new_remainder {
+        // If we couldn't make progress, stop parsing
+        if remainder == new_remainder {
             break;
         }
         
-        remainder = new_remainder;
+        // Check if we're at a separator 
+        if !new_remainder.starts_with(LIST_SEPARATOR) {
+            // No separator, update remainder to point after the cell
+            remainder = new_remainder;
+            break;
+        }
+        
+        // Skip past the separator and continue parsing
+        remainder = &new_remainder[LIST_SEPARATOR.len_utf8()..];
     }
     
     // Handle line endings
