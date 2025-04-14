@@ -244,26 +244,33 @@ pub fn parse_cell(input: &str) -> (Option<String>, &str) {
         return (None, "");
     }
     
-    // Parse the content until a newline or end of string
-    let mut pos = 0;
-    let mut found_newline = false;
+    // Start collecting cell content
+    let original = remainder;
+    let mut newline_found = false;
     
-    for c in remainder.chars() {
+    // Look for a newline character
+    while let Some(c) = remainder.chars().next() {
         if c == '\n' {
-            found_newline = true;
+            newline_found = true;
             break;
         }
-        pos += c.len_utf8();
+        remainder = &remainder[c.len_utf8()..];
     }
     
-    // Extract content and remaining input
-    if found_newline {
-        let content = remainder[..pos].trim_end();
-        let rest = &remainder[(pos + '\n'.len_utf8())..];
-        (Some(content.to_string()), rest)
+    // At this point, if newline_found is true, remainder starts with the newline
+    // If false, remainder is empty
+    
+    // Calculate the cell content (everything from original up to remainder)
+    let cell_len = original.len() - remainder.len();
+    let cell = &original[..cell_len];
+    
+    // Skip past the newline if found
+    let rest = if newline_found {
+        &remainder['\n'.len_utf8()..]
     } else {
-        // No newline found, process the entire string
-        let content = remainder.trim_end();
-        (Some(content.to_string()), "")
-    }
+        ""
+    };
+    
+    // Return the cell with trailing whitespace trimmed
+    (Some(cell.trim_end().to_string()), rest)
 }
