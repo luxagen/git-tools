@@ -292,8 +292,18 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     
     // Filter out repositories that are not in or below the current directory
     if let Some(tree_filter) = &config.tree_filter {
-        if !local_path.starts_with(tree_filter) {
-            eprintln!("Skipping repository outside of tree filter: {}", local_path);
+        // In Perl: cat_path(cwd,$localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/
+        // Get the absolute path from the current directory (which is now the listfile directory)
+        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let abs_local_path = current_dir.join(&local_path);
+        let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
+        let tree_filter_str = tree_filter.replace('\\', "/");
+        
+        // Check if the absolute path contains our original directory
+        if !abs_local_str.contains(&tree_filter_str) {
+            if get_operations().debug {
+                eprintln!("Skipping repository outside tree filter: {} (not in {})", &local_path, tree_filter_str);
+            }
             return Ok(());
         }
     }
@@ -301,12 +311,12 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
     let media_path = get_media_repo_path(config, &gm_rel_unescaped);
     
     if get_operations().debug {
-        eprintln!("Potential target: {}", local_path);
+        eprintln!("Potential target: {}", &local_path);
     }
     
     // Process the repository
     if let Err(err) = process_repo(config, &local_path, &remote_rel_unescaped, &media_path) {
-        eprintln!("Error processing {}: {}", local_path, err);
+        eprintln!("Error processing {}: {}", &local_path, err);
     }
     
     Ok(())
@@ -462,8 +472,9 @@ fn main() -> Result<()> {
     // Set MSYS_NO_PATHCONV=1 to prevent Windows Git path conversion issues
     std::env::set_var("MSYS_NO_PATHCONV", "1");
     
-    // Save the original working directory to use as a tree filter
+    // Save the original working directory to use as a tree filter (like $treeFilter in Perl)
     let tree_filter = env::current_dir()?;
+    let tree_filter_str = tree_filter.to_string_lossy().to_string();
     
     // Parse command line arguments
     let args = Args::parse();
@@ -491,8 +502,11 @@ fn main() -> Result<()> {
     let list_dir = find_listfile_dir(&config)?;
     let list_path = list_dir.join(&config.list_filename);
     
-    // Add the tree_filter to the config for repository filtering
-    config.tree_filter = Some(tree_filter.to_string_lossy().to_string());
+    // Just like Perl, change to the listfile directory - this simplifies path handling
+    env::set_current_dir(&list_dir)?;
+    
+    // Store original working directory for filtering
+    config.tree_filter = Some(tree_filter_str);
     
     // Process listfile
     if list_path.exists() {
