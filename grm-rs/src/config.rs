@@ -222,24 +222,22 @@ fn parse_config_line(line: &str) -> Option<(String, String)> {
 pub fn parse_cell(input: &str) -> (Option<String>, &str) {
     let mut remainder = input;
     
-    // Skip leading whitespace
+    // Skip leading whitespace until we find non-whitespace or newline
     loop {
-        if let Some(c) = remainder.chars().next() {
-            if !c.is_whitespace() {
-                // Found non-whitespace character
-                break;
-            }
+        match remainder.chars().next() {
+            // Found a non-whitespace character 
+            Some(c) if !c.is_whitespace() => break,
             
-            // Skip this whitespace character
-            remainder = &remainder[c.len_utf8()..];
+            // Found a newline or other whitespace
+            Some(c) => {
+                remainder = &remainder[c.len_utf8()..];
+                if c == '\n' {
+                    return (None, remainder);
+                }
+            },
             
-            if c == '\n' {
-                // Found newline while skipping whitespace
-                return (None, remainder);
-            }
-        } else {
-            // Empty string
-            return (None, "");
+            // End of string
+            None => return (None, ""),
         }
     }
     
