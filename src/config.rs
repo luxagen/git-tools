@@ -109,8 +109,15 @@ impl Config {
     
     /// Load configuration from environment variables starting with GRM_
     pub fn load_from_env(&mut self) {
-        // Check if this is a recursive invocation
-        let is_recursive = std::env::var("GRM_RECURSE_PREFIX").is_ok();
+        // Check if this is a recursive invocation and set the recurse_prefix
+        if let Ok(prefix) = std::env::var("GRM_RECURSE_PREFIX") {
+            self.recurse_prefix = prefix;
+        } else {
+            self.recurse_prefix = String::new();
+        }
+        
+        // Determine if we are in a recursive call for permission checking
+        let is_recursive = !self.recurse_prefix.is_empty();
         
         for (key, value) in std::env::vars() {
             if let Some(conf_key) = key.strip_prefix("GRM_") {
