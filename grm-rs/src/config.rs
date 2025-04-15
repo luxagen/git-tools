@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 use anyhow::{Context, Result, anyhow};
 
@@ -160,16 +160,11 @@ impl Config {
     // TODO Why to_string()?
     /// Load configuration from a file
     pub fn load_from_file(&mut self, path: &Path) -> Result<()> {
-        let file = File::open(path)
-            .with_context(|| format!("Failed to open config file: {}", path.display()))?;
+        let iter = ConfigLineIterator::from_file(path)?;
         
-        let reader = BufReader::new(file);
-        
-        for line in reader.lines() {
-            let line = line?;
-            
-            if let Some((key, value)) = parse_config_line(&line) {
-                self.set_from_string(key, value);
+        for cells in iter {
+            if cells.len() >= 2 {
+                self.set_from_string(cells[0].clone(), cells[1].clone());
             }
         }
         
@@ -196,6 +191,61 @@ impl Config {
             "TREE_FILTER" => self.tree_filter = Some(value),
             _ => {} // Ignore unknown keys
         }
+    }
+}
+
+/// Iterator over parsed lines from a configuration file or repository file
+pub struct ConfigLineIterator {
+    content: String,
+    position: usize,
+}
+
+impl ConfigLineIterator {
+    /// Create a new iterator from a file path
+    pub fn from_file(path: &Path) -> Result<Self> {
+        // Read the entire file into memory in binary mode
+        let mut file = File::open(path)
+            .with_context(|| format!("Failed to open file: {}", path.display()))?;
+        
+        let mut content = String::new();
+        file.read_to_string(&mut content)
+            .with_context(|| format!("Failed to read file: {}", path.display()))?;
+        
+        Ok(Self {
+            content,
+            position: 0,
+        })
+    }
+    
+    /// Create a new iterator from a string
+    pub fn from_string(content: String) -> Self {
+        Self {
+            content,
+            position: 0,
+        }
+    }
+}
+
+impl Iterator for ConfigLineIterator {
+    type Item = Vec<String>;
+    
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.position >= self.content.len() {
+            return None;
+        }
+        
+        let remainder = &self.content[self.position..];
+        let (cells, new_remainder) = parse_config_line(remainder);
+        
+        // Update position for next iteration
+        self.position = self.content.len() - new_remainder.len();
+        
+        // Skip empty lines and comments (they return empty cell vectors)
+        if cells.is_empty() {
+            return self.next();
+        }
+        
+        Some(cells)
     }
 }
 
