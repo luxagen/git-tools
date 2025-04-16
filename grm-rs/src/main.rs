@@ -181,7 +181,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: Option<&str>
     Ok(())
 }
 
-/// Process a listfile (similar to listfile_process in Perl)
+/// Process a repository listfile
 fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
     // Use ConfigLineIterator to handle file reading and line parsing
     let iter = ConfigLineIterator::from_file(list_path)?;
@@ -193,9 +193,9 @@ fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
             continue;
         }
         
-        // Process the parsed cells
+        // Process the repository line cells
         if let Err(err) = process_repo_line(config, cells) {
-            eprintln!("Error processing cells: {:?}", err);
+            eprintln!("Error processing repository line: {}", err);
         }
     }
     
@@ -226,7 +226,7 @@ fn get_mode_string() -> String {
     "status".to_string() // default
 }
 
-/// Process parsed cells from a repository list file
+/// Process cells from a repository list file
 fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     // Skip empty cell arrays (already handled by ConfigLineIterator)
     if cells.is_empty() {
@@ -234,7 +234,6 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     }
     
     // Skip comment lines where first non-empty cell starts with #
-    // Note: Completely empty lines are already skipped by ConfigLineIterator
     for cell in &cells {
         if !cell.is_empty() {
             if cell.starts_with('#') {
@@ -254,49 +253,45 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
         return Ok(());
     }
     
-    // Process normal repository specification
-    process_repo_specification(config, &cells)
+    // Process cells as repository specification with appropriate defaults
+    process_repo_cells(config, cells)
 }
 
-/// Process a repository specification from the parsed cells
-fn process_repo_specification(config: &mut Config, fields: &[String]) -> Result<()> {
-    // Get repository paths from fields
-    let remote_rel_raw = &fields[0];
-    let local_rel_raw = if fields.len() > 1 { &fields[1] } else { "" };
-    let gm_rel_raw = if fields.len() > 2 { &fields[2] } else { "" };
+/// Process cells as a repository specification
+fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
+    // We already know cells is not empty from process_repo_line check
+    
+    // First cell is always the remote relative path
+    let remote_rel = cells[0].clone();
     
     // Extract repo name from remote path for default values
     let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-    let repo_name = match re.captures(remote_rel_raw) {
-        Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
-        None => "",
+    let repo_name = match re.captures(&remote_rel) {
+        Some(caps) => caps.get(1).map_or("", |m| m.as_str()).to_string(),
+        None => String::new(),
     };
     
-    // Unescape all paths - this is still needed as ConfigLineIterator
-    // doesn't handle the escaping within cells
-    let remote_rel_unescaped = unescape_backslashes(remote_rel_raw);
-    
-    // Apply defaults and unescape
-    let local_rel_unescaped = if local_rel_raw.is_empty() {
-        repo_name.to_string()
+    // Second cell is local relative path, defaults to repo_name if empty or missing
+    let local_rel = if cells.len() > 1 && !cells[1].is_empty() {
+        cells[1].clone()
     } else {
-        unescape_backslashes(local_rel_raw)
+        repo_name.clone()
     };
     
-    let gm_rel_unescaped = if gm_rel_raw.is_empty() {
-        repo_name.to_string()
+    // Third cell is media relative path, defaults to local_rel if empty or missing
+    let media_rel = if cells.len() > 2 && !cells[2].is_empty() {
+        cells[2].clone()
     } else {
-        unescape_backslashes(gm_rel_raw)
+        local_rel.clone()
     };
     
     // Get directory values from config
-    let local_path = get_local_repo_path(config, Some(&local_rel_unescaped));
-    let media_path = get_media_repo_path(config, Some(&gm_rel_unescaped));
+    let local_path = get_local_repo_path(config, Some(&local_rel));
+    let media_path = get_media_repo_path(config, Some(&media_rel));
     
     // Filter out repositories that are not in or below the current directory
     if let Some(tree_filter) = &config.tree_filter {
-        // In Perl: cat_path(cwd,$localPath) =~ /\Q$treeFilter\E(?:\/.+)?$/
-        // Get the absolute path from the current directory (which is now the listfile directory)
+        // Get the absolute path from the current directory
         let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let abs_local_path = current_dir.join(&local_path);
         let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
@@ -316,7 +311,7 @@ fn process_repo_specification(config: &mut Config, fields: &[String]) -> Result<
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &local_path, Some(&remote_rel_unescaped), Some(&media_path)) {
+    if let Err(err) = process_repo(config, &local_path, Some(&remote_rel), Some(&media_path)) {
         eprintln!("Error processing {}: {}", &local_path, err);
     }
     
