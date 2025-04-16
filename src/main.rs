@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 #![allow(unused_imports)]
 
 use std::env;
@@ -346,100 +345,6 @@ fn get_repo_triple<'a>(cells: &'a Vec<String>) -> Result<RepoTriple<'a>> {
     };
     
     Ok(RepoTriple { remote: &remote_rel, local: &local_rel, media: &media_rel })
-}
-
-/// Split a line by separator character, respecting escaped separators
-fn split_with_escapes(line: &str, separator: char) -> Vec<String> {
-    let mut result = Vec::new();
-    let mut current = String::new();
-    let mut chars = line.chars().peekable();
-    
-    // Special handling for lines that start with the separator
-    if let Some(&c) = chars.peek() {
-        if c == separator {
-            // If line starts with separator, add an empty string as first field
-            result.push(String::new());
-            chars.next(); // Consume the separator
-        }
-    }
-    
-    while let Some(c) = chars.next() {
-        if c == '\\' {
-            // Backslash found - get the next character and treat it literally
-            if let Some(next_char) = chars.next() {
-                current.push(next_char);
-            } else {
-                // Handle trailing backslash at end of line
-                current.push('\\');
-            }
-        } else if c == separator {
-            // Unescaped separator - add current part to result and start a new one
-            result.push(current.trim().to_string());
-            current = String::new();
-        } else {
-            // Regular character, just add it
-            current.push(c);
-        }
-    }
-    
-    // Add the last part
-    result.push(current.trim().to_string());
-    
-    result
-}
-
-/// Concatenate path segments
-fn cat_path(pieces: &[&str]) -> String {
-    let mut result = String::new();
-    
-    for piece in pieces.iter().filter(|p| !p.is_empty()) {
-        let piece = piece.trim_start_matches("./");
-        
-        if !result.is_empty() {
-            result.push('/');
-        }
-        result.push_str(piece);
-        
-        // If this is an absolute path, return immediately
-        if piece.starts_with('/') {
-            return result;
-        }
-    }
-    
-    result
-}
-
-/// Clean and normalize a path for remote URL construction
-fn normalize_path_for_url(path: &str) -> String {
-    // Use the standard URL library for proper path encoding
-    // This handles spaces, brackets, and all other special characters
-    Url::parse("http://example.com/")
-        .unwrap()
-        .join(path)
-        .unwrap()
-        .path()
-        .trim_start_matches('/')
-        .to_string()
-}
-
-/// Unescape backslash sequences in a string
-/// Simply removes backslashes, treating the character after each as a literal
-fn unescape_backslashes(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    
-    while let Some(c) = chars.next() {
-        if c == '\\' && chars.peek().is_some() {
-            // Skip the backslash and add whatever character follows it
-            if let Some(next_char) = chars.next() {
-                result.push(next_char);
-            }
-        } else {
-            result.push(c);
-        }
-    }
-    
-    result
 }
 
 /// Get remote repository path from config and relative path
