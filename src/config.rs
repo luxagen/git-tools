@@ -11,7 +11,7 @@ use crate::LIST_SEPARATOR;
 pub struct Config {
     /// Configuration filename (.grm.conf by default)
     pub config_filename: String,
-    /// List filename (.grm.repos by default)
+    /// List filename
     pub list_filename: String,
     /// Whether recursion is enabled (1 by default)
     pub recurse_enabled: bool,
@@ -42,7 +42,7 @@ impl Config {
     pub fn new() -> Self {
         Self {
             config_filename: ".grm.conf".to_string(),
-            list_filename: ".grm.repos".to_string(),
+            list_filename: String::new(),
             recurse_enabled: true,
             rlogin: String::new(),
             rpath_base: String::new(),
