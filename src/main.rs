@@ -100,18 +100,18 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         return Ok(());
     }
     
+    // Handle list_rrel first since it needs the original repo.remote
+    if operations.list_rrel {
+        println!("{}", repo.remote); // Use original repo.remote for relative path
+        return Ok(());
+    }
+    
     // For all other operations, use the remote URL instead of the relative path
     let url_repo = RepoTriple {
         remote: &get_remote_url(config, repo.remote),
         local: repo.local,
         media: repo.media,
     };
-    
-    // Different behavior based on mode flags
-    if operations.list_rrel {
-        println!("{}", repo.remote); // Use original repo.remote for relative path
-        return Ok(());
-    }
 
     if operations.list_lrel {
         println!("{}", prefixed_local_path);
