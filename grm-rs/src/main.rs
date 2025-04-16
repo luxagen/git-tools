@@ -56,7 +56,7 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 }
 
 /// Process a single repository
-fn process_repo(config: &Config, local_path: &str, remote_rel_path: Option<&str>, media_path: Option<&str>) -> Result<()> {
+fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_path: &str) -> Result<()> {
     // Use the recurse prefix directly from the config
     let prefixed_local_path = format!("{}{}", config.recurse_prefix, local_path);
     
@@ -325,7 +325,7 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &local_path, Some(repo_spec.remote_rel), Some(&media_path)) {
+    if let Err(err) = process_repo(config, &local_path, repo_spec.remote_rel, &media_path) {
         eprintln!("Error processing {}: {}", &local_path, err);
     }
     
@@ -463,20 +463,20 @@ pub fn get_local_repo_path(config: &Config, repo_path: &str) -> String {
 }
 
 /// Get formatted remote URL based on configuration and remote relative path
-fn get_remote_url(config: &Config, remote_rel_path: Option<&str>) -> String {
+fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
     // Get the base path, defaulting to empty string if not set
     let base_path = &config.rpath_base;
     
     // Use the remote repo path function to handle paths consistently
-    let full_repo_path = get_remote_repo_path(config, remote_rel_path.unwrap_or(""));
+    let full_repo_path = get_remote_repo_path(config, remote_rel_path);
     
     // Choose URL format based on configuration
     if !config.rlogin.is_empty() {
         // We have login information
-        remote_url::build_remote_url(Some(&config.rlogin), base_path, &full_repo_path)
+        remote_url::build_remote_url(&config.rlogin, base_path, &full_repo_path)
     } else {
         // No login info
-        remote_url::build_remote_url(None, base_path, &full_repo_path)
+        remote_url::build_remote_url("", base_path, &full_repo_path)
     }
 }
 
