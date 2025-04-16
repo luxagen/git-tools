@@ -93,9 +93,26 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
             return Ok(());
         }
         
-        // Create new repo (which includes configuring and setting remote)
+        // Create new repo
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
-        repository::create_new(repo, config)?;
+        let is_virgin_repo = repository::create_new(repo, config)?;
+        
+        // Get the URL version of repo for configuration and remote
+        let url_repo = RepoTriple {
+            remote: &get_remote_url(config, repo.remote),
+            local: repo.local,
+            media: repo.media,
+        };
+        
+        // Configure and set remote (same operations as for existing repos)
+        repository::execute_config_cmd(&url_repo, config)?;
+        repository::add_git_remote(&url_repo)?;
+        
+        // Checkout master if this was a virgin repository
+        if is_virgin_repo {
+            repository::run_git_command(repo.local, "checkout master")?;
+        }
+        
         eprintln!("{} created", prefixed_local_path);
         return Ok(());
     }
