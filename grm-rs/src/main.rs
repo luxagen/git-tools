@@ -282,17 +282,16 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     // First cell is always the remote relative path
     let remote_rel = cells[0].clone();
     
-    // Extract repo name from remote path for default values
-    let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-    let repo_name = match re.captures(&remote_rel) {
-        Some(caps) => caps.get(1).map_or("", |m| m.as_str()).to_string(),
-        None => String::new(),
-    };
-    
     // Second cell is local relative path, defaults to repo_name if empty or missing
     let local_rel = if cells.len() > 1 && !cells[1].is_empty() {
         cells[1].clone()
     } else {
+        // Extract repo name from remote path for default values
+        let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
+        let repo_name = match re.captures(&remote_rel) {
+            Some(caps) => caps.get(1).map_or("", |m| m.as_str()).to_string(),
+            None => String::new(),
+        };
         repo_name.clone()
     };
     
