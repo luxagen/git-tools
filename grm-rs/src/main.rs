@@ -275,42 +275,36 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
 // Use the shared RepoTriple from repository.rs
 use crate::repository::RepoTriple;
 
-fn do_thing(cells:Vec<String>) -> Result<(String,String,String)> {
+fn get_repo_triple<'a>(cells: &'a Vec<String>) -> Result<RepoTriple<'a>> {
     // First cell is always the remote relative path
-    let remote_rel = cells[0].clone();
+    let remote_rel = &cells[0];
     
     // Second cell is local relative path, defaults to repo_name if empty or missing
     let local_rel = if cells.len() > 1 && !cells[1].is_empty() {
-        cells[1].clone()
+        &cells[1]
     } else {
         // Extract repo name from remote path for default values
         let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
         match re.captures(&remote_rel) {
-            Some(caps) => caps.get(1).map_or("", |m| m.as_str()).to_string(),
-            None => String::new(),
+            Some(caps) => caps.get(1).map_or("", |m| m.as_str()),
+            None => "",
         }
     };
     
     // Third cell is media relative path, defaults to local_rel if empty or missing
     let media_rel = if cells.len() > 2 && !cells[2].is_empty() {
-        cells[2].clone()
+        &cells[2]
     } else {
-        local_rel.clone()
+        local_rel
     };
     
-    Ok((remote_rel, local_rel, media_rel))
+    Ok(RepoTriple { remote: &remote_rel, local: &local_rel, media: &media_rel })
 }
 /// Process cells as a repository specification
 fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     // We already know cells is not empty from process_repo_line check
 
-    let (remote_rel, local_rel, media_rel) = do_thing(cells)?;
-    // Create a RepoTriple with references to our strings
-    let repo_spec = RepoTriple {
-        remote: &remote_rel,
-        local: &local_rel,
-        media: &media_rel,
-    };
+    let repo_spec = get_repo_triple(&cells)?;
     
     // Filter out repositories that are not in or below the current directory
     let tree_filter = &config.tree_filter;
