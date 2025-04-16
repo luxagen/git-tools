@@ -62,10 +62,54 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
 
     // Get operations
     let operations = get_operations();
-
+    
+    // Get local path info
+    let path = Path::new(repo.local);
+    
+    // Handle 'new' operation first - it's mutually exclusive with all others
+    if operations.new {
+        // Check if path exists and is a directory
+        if !path.exists() {
+            eprintln!("ERROR: {} does not exist", prefixed_local_path);
+            return Ok(());
+        }
+        
+        if !path.is_dir() {
+            eprintln!("ERROR: {} is not a directory", prefixed_local_path);
+            return Ok(());
+        }
+        
+        // Check if it's already a repository
+        let is_repo = match repository::is_dir_repo_root(repo.local) {
+            Ok(result) => result,
+            Err(err) => {
+                eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
+                return Ok(());
+            }
+        };
+        
+        if is_repo {
+            eprintln!("{} already exists (skipping)", prefixed_local_path);
+            return Ok(());
+        }
+        
+        // Create new repo (which includes configuring and setting remote)
+        eprintln!("Creating new Git repository in {}", prefixed_local_path);
+        repository::create_new(repo, config)?;
+        eprintln!("{} created", prefixed_local_path);
+        return Ok(());
+    }
+    
+    // For all other operations, use the remote URL instead of the relative path
+    let url_repo = RepoTriple {
+        remote: &get_remote_url(config, repo.remote),
+        local: repo.local,
+        media: repo.media,
+    };
+    
     // Different behavior based on mode flags
     if operations.list_rrel {
-        println!("{}", repo.remote);
+        println!("{}", repo.remote); // Use original repo.remote for relative path
         return Ok(());
     }
 
@@ -75,8 +119,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     }
 
     if operations.list_rurl {
-        // Generate remote URL using only the remote relative path
-        println!("{}", get_remote_url(config, repo.remote));
+        println!("{}", url_repo.remote); // Use url_repo.remote for URL
         return Ok(());
     }
     
@@ -88,22 +131,13 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Helper to avoid duplicating unwrap_or for media path
     let configure_repo = |should_configure: bool| -> Result<()> {
         if should_configure {
-            // Use the repository specification directly
-            repository::configure_repo(&repo, config)?;
+            repository::configure_repo(&url_repo, config)?
         }
         Ok(())
     };
     
-    // Get local path info
-    let path = Path::new(repo.local);
-    
     // Process based on path state
     if !path.exists() {
-        if operations.new {
-            eprintln!("ERROR: {} does not exist", prefixed_local_path);
-            return Ok(());
-        }
-        
         // Only clone if clone operation is enabled
         if !operations.clone {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
@@ -111,13 +145,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         }
         
         // Clone, configure, and checkout
-        // Create a new RepoTriple with the full remote URL
-        let clone_repo = RepoTriple {
-            remote: &get_remote_url(config, repo.remote),
-            local: repo.local,
-            media: repo.media,
-        };
-        repository::clone_repo_no_checkout(&clone_repo)?;
+        repository::clone_repo_no_checkout(&url_repo)?;
         configure_repo(true)?;
         repository::check_out(repo.local)?;
         
@@ -140,23 +168,12 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     };
     
     if is_repo {
-        if operations.new {
-            eprintln!("{} already exists (skipping)", prefixed_local_path);
-            return Ok(());
-        }
-        
         // Get remote URL
         eprintln!("{} exists", prefixed_local_path);
         
         // Update remote and configure
         if operations.set_remote {
-            // Create a new RepoTriple with the full remote URL
-            let update_repo = RepoTriple {
-                remote: &get_remote_url(config, repo.remote),
-                local: repo.local,
-                media: repo.media,
-            };
-            repository::set_remote(&update_repo)?;
+            repository::set_remote(&url_repo)?;
         }
         
         configure_repo(operations.configure)?;
@@ -171,28 +188,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         return Ok(());
     }
     
-    // Handle non-repo directories
-    if !operations.new {
-        eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
-        return Ok(());
-    }
-    
-    // In "new" mode, we want to create git repositories for existing directories
-    // registered in a listfile that aren't git repositories yet
-
-    // Only create a repository if the directory exists
-    if path.exists() && operations.new {
-        eprintln!("Creating new Git repository in {}", prefixed_local_path);
-
-        // Use the existing RepoTriple directly
-        repository::create_new(&repo, config)?;
-        eprintln!("{} created", prefixed_local_path);
-    } else {
-        // Directory doesn't exist, just skip it
-        eprintln!("{} does not exist (skipping)", prefixed_local_path);
-    }
-
-    Ok(())
+    // If we get here, the directory exists but isn't a git repository
+    eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
+    return Ok(());
 }
 
 /// Process a repository listfile
