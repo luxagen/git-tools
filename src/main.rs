@@ -223,8 +223,7 @@ fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
     let operations = get_operations();
     if operations.recurse {
         let parent_dir = list_path.parent().unwrap_or(Path::new("."));
-        if let Err(err) = recursive::recurse_listfiles(parent_dir, config, 
-                                                       &get_mode_string()) {
+        if let Err(err) = recursive::recurse_listfiles(parent_dir, config, &get_mode_string()) {
             eprintln!("Error during recursion: {}", err);
         }
     }
