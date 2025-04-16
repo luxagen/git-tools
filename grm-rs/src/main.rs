@@ -21,7 +21,7 @@ mod remote_url;
 use mode::{PrimaryMode, initialize_operations, get_operations};
 use config::{Config, ConfigLineIterator};
 
-/// Separator character used in .grm.repos files
+/// Separator character used in listfiles
 const LIST_SEPARATOR: char = '*';
 
 /// Git Repository Manager - Rust implementation
@@ -180,7 +180,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     }
     
     // In "new" mode, we want to create git repositories for existing directories
-    // that aren't git repositories yet, regardless of whether they're in .grm.repos
+    // registered in a listfile that aren't git repositories yet
     
     // Only create a repository if the directory exists
     if path.exists() && operations.new {
