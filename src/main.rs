@@ -172,12 +172,12 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         // Get remote URL
         eprintln!("{} exists", prefixed_local_path);
         
-        // Update remote and configure
+        // Configure first, then update remote
+        configure_repo(operations.configure)?;
+        
         if operations.set_remote {
             repository::set_remote(&repo)?;
         }
-        
-        configure_repo(operations.configure)?;
         
         if operations.git {
             // Execute git commands in the repository
