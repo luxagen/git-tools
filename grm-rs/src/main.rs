@@ -56,16 +56,16 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 }
 
 /// Process a single repository
-fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_path: &str) -> Result<()> {
+fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Use the recurse prefix directly from the config
-    let prefixed_local_path = format!("{}{}", config.recurse_prefix, local_path);
+    let prefixed_local_path = format!("{}{}", config.recurse_prefix, repo.local);
 
     // Get operations
     let operations = get_operations();
 
     // Different behavior based on mode flags
     if operations.list_rrel {
-        println!("{}", remote_rel_path);
+        println!("{}", repo.remote);
         return Ok(());
     }
 
@@ -76,7 +76,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
 
     if operations.list_rurl {
         // Generate remote URL using only the remote relative path
-        println!("{}", get_remote_url(config, remote_rel_path));
+        println!("{}", get_remote_url(config, repo.remote));
         return Ok(());
     }
     
@@ -88,18 +88,14 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     // Helper to avoid duplicating unwrap_or for media path
     let configure_repo = |should_configure: bool| -> Result<()> {
         if should_configure {
-            let repo = RepoTriple {
-                remote: remote_rel_path,
-                local: local_path,
-                media: media_path,
-            };
+            // Use the repository specification directly
             repository::configure_repo(&repo, config)?;
         }
         Ok(())
     };
     
     // Get local path info
-    let path = Path::new(local_path);
+    let path = Path::new(repo.local);
     
     // Process based on path state
     if !path.exists() {
@@ -115,14 +111,15 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         }
         
         // Clone, configure, and checkout
-        let repo = RepoTriple {
-            remote: &get_remote_url(config, remote_rel_path),
-            local: local_path,
-            media: media_path,
+        // Create a new RepoTriple with the full remote URL
+        let clone_repo = RepoTriple {
+            remote: &get_remote_url(config, repo.remote),
+            local: repo.local,
+            media: repo.media,
         };
-        repository::clone_repo_no_checkout(&repo)?;
+        repository::clone_repo_no_checkout(&clone_repo)?;
         configure_repo(true)?;
-        repository::check_out(local_path)?;
+        repository::check_out(repo.local)?;
         
         return Ok(());
     }
@@ -134,10 +131,10 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     }
     
     // Check if directory is a git repository
-    let is_repo = match repository::is_dir_repo_root(local_path) {
+    let is_repo = match repository::is_dir_repo_root(repo.local) {
         Ok(result) => result,
         Err(err) => {
-            eprintln!("Error checking if {} is a Git repository: {}", local_path, err);
+            eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
             return Ok(());
         }
     };
@@ -153,12 +150,13 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         
         // Update remote and configure
         if operations.set_remote {
-            let repo = RepoTriple {
-                remote: &get_remote_url(config, remote_rel_path),
-                local: local_path,
-                media: media_path,
+            // Create a new RepoTriple with the full remote URL
+            let update_repo = RepoTriple {
+                remote: &get_remote_url(config, repo.remote),
+                local: repo.local,
+                media: repo.media,
             };
-            repository::set_remote(&repo)?;
+            repository::set_remote(&update_repo)?;
         }
         
         configure_repo(operations.configure)?;
@@ -166,7 +164,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         if operations.git {
             // Execute git commands in the repository
             if !config.git_args.is_empty() {
-                repository::run_git_command(local_path, &config.git_args)?;
+                repository::run_git_command(repo.local, &config.git_args)?;
             }
         }
         
@@ -186,11 +184,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     if path.exists() && operations.new {
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
 
-        let repo = RepoTriple {
-            remote: remote_rel_path,
-            local: local_path,
-            media: media_path,
-        };
+        // Use the existing RepoTriple directly
         repository::create_new(&repo, config)?;
         eprintln!("{} created", prefixed_local_path);
     } else {
@@ -314,35 +308,31 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
         media: &media_rel,
     };
     
-    // Get directory values from config using the RepoTriple
-    let local_path = get_local_repo_path(config, repo_spec.local);
-    let media_path = get_media_repo_path(config, repo_spec.media);
-    
     // Filter out repositories that are not in or below the current directory
     let tree_filter = &config.tree_filter;
     if !tree_filter.is_empty() {
         // Get the absolute path from the current directory
         let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let abs_local_path = current_dir.join(&local_path);
+        let abs_local_path = current_dir.join(&repo_spec.local);
         let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
         let tree_filter_str = tree_filter.replace('\\', "/");
         
         // Check if the absolute path contains our original directory
         if !abs_local_str.contains(&tree_filter_str) {
             if get_operations().debug {
-                eprintln!("Skipping repository outside tree filter: {} (not in {})", &local_path, tree_filter_str);
+                eprintln!("Skipping repository outside tree filter: {} (not in {})", &repo_spec.local, tree_filter_str);
             }
             return Ok(());
         }
     }
     
     if get_operations().debug {
-        eprintln!("Potential target: {}", &local_path);
+        eprintln!("Potential target: {}", &repo_spec.local);
     }
     
-    // Process the repository
-    if let Err(err) = process_repo(config, &local_path, repo_spec.remote, &media_path) {
-        eprintln!("Error processing {}: {}", &local_path, err);
+    // Process the repository using the RepoTriple directly
+    if let Err(err) = process_repo(config, &repo_spec) {
+        eprintln!("Error processing {}: {}", &repo_spec.local, err);
     }
     
     Ok(())
