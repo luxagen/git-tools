@@ -272,21 +272,8 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     let repo_spec = get_repo_triple(&cells)?;
     
     // Filter out repositories that are not in or below the current directory
-    let tree_filter = &config.tree_filter;
-    if !tree_filter.is_empty() {
-        // Get the absolute path from the current directory
-        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let abs_local_path = current_dir.join(&repo_spec.local);
-        let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
-        let tree_filter_str = tree_filter.replace('\\', "/");
-        
-        // Check if the absolute path contains our original directory
-        if !abs_local_str.contains(&tree_filter_str) {
-            if get_operations().debug {
-                eprintln!("Skipping repository outside tree filter: {} (not in {})", &repo_spec.local, tree_filter_str);
-            }
-            return Ok(());
-        }
+    if !passes_tree_filter(&config.tree_filter, &repo_spec.local) {
+        return Ok(());
     }
     
     if get_operations().debug {
@@ -303,6 +290,30 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
 
 // Use the shared RepoTriple from repository.rs
 use crate::repository::RepoTriple;
+
+/// Check if a repository local path passes the tree filter
+/// Returns true if there is no filter or if the path is within the filter
+fn passes_tree_filter(tree_filter: &str, local_path: &str) -> bool {
+    // If there's no tree filter, all paths pass
+    if tree_filter.is_empty() {
+        return true;
+    }
+    
+    // Get the absolute path from the current directory
+    let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    let abs_local_path = current_dir.join(local_path);
+    let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
+    let tree_filter_str = tree_filter.replace('\\', "/");
+    
+    // Check if the absolute path contains our filter string
+    let passes = abs_local_str.contains(&tree_filter_str);
+    
+    if !passes && get_operations().debug {
+        eprintln!("Skipping repository outside tree filter: {} (not in {})", local_path, tree_filter_str);
+    }
+    
+    passes
+}
 
 fn get_repo_triple<'a>(cells: &'a Vec<String>) -> Result<RepoTriple<'a>> {
     // First cell is always the remote relative path
