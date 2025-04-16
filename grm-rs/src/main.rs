@@ -100,10 +100,8 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
         needs_checkout = repository::create_new(repo, config)?;
         
-        // Use the original repo in URL form for the following operations
-        // Will fall through to the shared repository processing logic
-        operations.configure = true;
-        operations.set_remote = true;
+        // The operations.configure and operations.set_remote flags are already set
+        // via the mode->operations translation in mode.rs for 'new' mode
         eprintln!("{} created", prefixed_local_path);
     }
     
@@ -136,13 +134,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         return Ok(());
     }
     
-    // Helper to avoid duplicating unwrap_or for media path
-    let configure_repo = |should_configure: bool| -> Result<()> {
-        if should_configure {
-            repository::configure_repo(&repo, config)?
-        }
-        Ok(())
-    };
+    // No longer need the configure_repo helper as we'll use direct conditional checks
     
     // Process based on path state
     if !path.exists() {
@@ -154,7 +146,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         
         // Clone, configure, and checkout
         repository::clone_repo_no_checkout(&repo)?;
-        configure_repo(true)?;
+        repository::configure_repo(&repo, config)?; // Always configure after clone
         repository::check_out(repo.local)?;
         
         return Ok(());
@@ -182,7 +174,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         }
         
         // Configure first, then update remote
-        configure_repo(operations.configure)?;
+        if operations.configure {
+            repository::configure_repo(&repo, config)?;
+        }
         
         if operations.set_remote {
             repository::set_remote(&repo)?;
