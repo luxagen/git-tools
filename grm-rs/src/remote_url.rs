@@ -49,44 +49,28 @@ pub fn build_remote_url(rlogin: &str, remote_dir: &str, repo_path: &str) -> Stri
             remote_dir.trim_end_matches('/'),
             repo_path.trim_start_matches('/'));
     }
+
     let login = rlogin.trim_end_matches('/');
     if login.contains("://") {
-        // Protocol-based URL (http://, https://, ssh://)
+        // Protocol-based URL (http://, https://, ssh://, etc)
         let login_parts: Vec<&str> = login.splitn(2, "://").collect();
         let protocol = login_parts[0];
         let domain = login_parts[1].trim_end_matches('/');
-        // For HTTP/HTTPS, use URL encoding through gix-url
-        if protocol == "http" || protocol == "https" {
-            // Create a full URL with the path
-            let path = format!("{}/{}", 
-                remote_dir.trim_matches('/'),
-                repo_path.trim_start_matches('/'));
-            let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
-            // Try to parse and normalize with gix-url
-            if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
-                return parsed.to_string();
-            }
-            // Fall back to simple string formatting if parsing fails
-            return full_url;
-        } else if protocol == "ssh" {
-            // SSH protocol with explicit scheme
-            let path = format!("{}/{}", 
-                remote_dir.trim_matches('/'),
-                repo_path.trim_start_matches('/'));
-            return format!("{}://{}/{}", protocol, domain, path);
-        } else {
-            // Other protocols, handle generically
-            let path = format!("{}/{}", 
-                remote_dir.trim_matches('/'),
-                repo_path.trim_start_matches('/'));
-            return format!("{}://{}/{}", protocol, domain, path);
+        let path = format!("{}/{}", remote_dir.trim_matches('/'), repo_path.trim_start_matches('/'));
+        match protocol {
+            "http" | "https" => {
+                let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
+                // Try to parse and normalize with gix-url
+                if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
+                    return parsed.to_string();
+                }
+                // Fall back to simple string formatting if parsing fails
+                full_url
+            },
+            _ => format!("{}://{}/{}", protocol, domain, path)
         }
     } else {
-        // SSH SCP-style syntax (user@host:path)
-        let path = format!("{}/{}", 
-            remote_dir.trim_matches('/'),
-            repo_path.trim_start_matches('/'));
-        format!("{}:{}", login, path)
+        format!("{}:{}/{}", login, remote_dir.trim_matches('/'), repo_path.trim_start_matches('/'))
     }
 }
 
