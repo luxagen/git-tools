@@ -136,7 +136,7 @@ fn add_git_remote(local_path: &str, remote_url: &str) -> Result<()> {
 }
 
 /// Create a new repository 
-pub fn create_new(local_path: &str, remote_rel_path: Option<&str>, config: &Config) -> Result<()> {
+pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> Result<()> {
     let remote_rel_path_str = remote_rel_path.unwrap_or("");
     println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_rel_path_str);
     

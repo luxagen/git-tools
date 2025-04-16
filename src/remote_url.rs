@@ -70,65 +70,62 @@ pub fn parse_remote_url(url_str: &str) -> Result<String> {
 /// * `rlogin` - Optional remote login info (e.g., "user@host" or "https://github.com")
 /// * `remote_dir` - Remote directory path
 /// * `repo_path` - Repository path
-pub fn build_remote_url(rlogin: Option<&str>, remote_dir: &str, repo_path: &str) -> String {
-    match rlogin {
-        Some(login) if !login.is_empty() => {
-            let login = login.trim_end_matches('/');
+pub fn build_remote_url(rlogin: &str, remote_dir: &str, repo_path: &str) -> String {
+    if !rlogin.is_empty() {
+        let login = rlogin.trim_end_matches('/');
+        
+        if login.contains("://") {
+            // Protocol-based URL (http://, https://, ssh://)
+            let login_parts: Vec<&str> = login.splitn(2, "://").collect();
+            let protocol = login_parts[0];
+            let domain = login_parts[1].trim_end_matches('/');
             
-            if login.contains("://") {
-                // Protocol-based URL (http://, https://, ssh://)
-                let login_parts: Vec<&str> = login.splitn(2, "://").collect();
-                let protocol = login_parts[0];
-                let domain = login_parts[1].trim_end_matches('/');
+            // For HTTP/HTTPS, use URL encoding through gix-url
+            if protocol == "http" || protocol == "https" {
+                // Create a full URL with the path
+                let path = format!("{}/{}", 
+                    remote_dir.trim_matches('/'),
+                    repo_path.trim_start_matches('/'));
                 
-                // For HTTP/HTTPS, use URL encoding through gix-url
-                if protocol == "http" || protocol == "https" {
-                    // Create a full URL with the path
-                    let path = format!("{}/{}", 
-                        remote_dir.trim_matches('/'),
-                        repo_path.trim_start_matches('/'));
-                    
-                    let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
-                    
-                    // Try to parse and normalize with gix-url
-                    if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
-                        return parsed.to_string();
-                    }
-                    
-                    // Fall back to simple string formatting if parsing fails
-                    return full_url;
-                } else if protocol == "ssh" {
-                    // SSH protocol with explicit scheme
-                    // For SSH, spaces should be preserved, not URL-encoded
-                    let path = format!("{}/{}", 
-                        unescape_backslashes(remote_dir).trim_matches('/'),
-                        unescape_backslashes(repo_path).trim_start_matches('/'));
-                    
-                    return format!("{}://{}/{}", protocol, domain, path);
-                } else {
-                    // Other protocols, handle generically
-                    let path = format!("{}/{}", 
-                        unescape_backslashes(remote_dir).trim_matches('/'),
-                        unescape_backslashes(repo_path).trim_start_matches('/'));
-                    
-                    return format!("{}://{}/{}", protocol, domain, path);
+                let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
+                
+                // Try to parse and normalize with gix-url
+                if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
+                    return parsed.to_string();
                 }
-            } else {
-                // SSH SCP-style syntax (user@host:path)
-                // For SSH, spaces and special chars should be preserved, not URL-encoded
+                
+                // Fall back to simple string formatting if parsing fails
+                return full_url;
+            } else if protocol == "ssh" {
+                // SSH protocol with explicit scheme
+                // For SSH, spaces should be preserved, not URL-encoded
                 let path = format!("{}/{}", 
                     unescape_backslashes(remote_dir).trim_matches('/'),
                     unescape_backslashes(repo_path).trim_start_matches('/'));
                 
-                format!("{}:{}", login, path)
+                return format!("{}://{}/{}", protocol, domain, path);
+            } else {
+                // Other protocols, handle generically
+                let path = format!("{}/{}", 
+                    unescape_backslashes(remote_dir).trim_matches('/'),
+                    unescape_backslashes(repo_path).trim_start_matches('/'));
+                
+                return format!("{}://{}/{}", protocol, domain, path);
             }
-        },
-        _ => {
-            // Local path - just unescape and join
-            format!("{}/{}", 
-                unescape_backslashes(remote_dir).trim_end_matches('/'),
-                unescape_backslashes(repo_path).trim_start_matches('/'))
+        } else {
+            // SSH SCP-style syntax (user@host:path)
+            // For SSH, spaces and special chars should be preserved, not URL-encoded
+            let path = format!("{}/{}", 
+                unescape_backslashes(remote_dir).trim_matches('/'),
+                unescape_backslashes(repo_path).trim_start_matches('/'));
+            
+            format!("{}:{}", login, path)
         }
+    } else {
+        // Local path - just unescape and join
+        format!("{}/{}", 
+            unescape_backslashes(remote_dir).trim_end_matches('/'),
+            unescape_backslashes(repo_path).trim_start_matches('/'))
     }
 }
 
@@ -157,8 +154,8 @@ mod tests {
     #[test]
     fn test_build_remote_url_with_login() {
         let result = build_remote_url(
-            Some("user@github.com"), 
-            "organization", 
+            "user@github.com",
+            "organization",
             "repository.git"
         );
         assert_eq!(result, "user@github.com:organization/repository.git");
@@ -167,8 +164,8 @@ mod tests {
     #[test]
     fn test_build_remote_url_without_login() {
         let result = build_remote_url(
-            None, 
-            "organization", 
+            "",
+            "organization",
             "repository.git"
         );
         assert_eq!(result, "organization/repository.git");
@@ -177,8 +174,8 @@ mod tests {
     #[test]
     fn test_build_remote_url_with_protocol() {
         let result = build_remote_url(
-            Some("https://github.com"), 
-            "organization", 
+            "https://github.com",
+            "organization",
             "repository.git"
         );
         assert_eq!(result, "https://github.com/organization/repository.git");
