@@ -19,7 +19,7 @@ mod config;
 mod remote_url;
 
 use mode::{PrimaryMode, initialize_operations, get_operations};
-use config::Config;
+use config::{Config, ConfigLineIterator};
 
 /// Separator character used in .grm.repos files
 const LIST_SEPARATOR: char = '*';
@@ -183,20 +183,19 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: Option<&str>
 
 /// Process a listfile (similar to listfile_process in Perl)
 fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
-    let contents = fs::read_to_string(list_path)
-        .with_context(|| format!("Failed to read {}", list_path.display()))?;
+    // Use ConfigLineIterator to handle file reading and line parsing
+    let iter = ConfigLineIterator::from_file(list_path)?;
     
-    // Process each line in the file
-    for line in contents.lines() {
-        let line = line.trim();
-        
-        // Skip empty lines and comments
-        if line.is_empty() || line.starts_with('#') {
+    // Process each parsed line
+    for cells in iter {
+        // Skip empty lines and comments (already handled by ConfigLineIterator)
+        if cells.is_empty() {
             continue;
         }
         
-        if let Err(err) = process_repo_line(config, line) {
-            eprintln!("Error processing line \"{}\": {}", line, err);
+        // Process the parsed cells
+        if let Err(err) = process_repo_line(config, cells) {
+            eprintln!("Error processing cells: {:?}", err);
         }
     }
     
@@ -227,29 +226,40 @@ fn get_mode_string() -> String {
     "status".to_string() // default
 }
 
-/// Process a repository line from a listfile
-fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
-    // Skip comments and empty lines BEFORE splitting
-    let trimmed = line.trim();
-    if trimmed.is_empty() || trimmed.starts_with('#') {
-        eprintln!("DEBUG-SKIP: Skipping empty/comment line");
+/// Process parsed cells from a repository list file
+fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
+    // Skip empty cell arrays (already handled by ConfigLineIterator)
+    if cells.is_empty() {
         return Ok(());
     }
-
-    // Process line to extract fields
-    let fields = split_with_escapes(line, LIST_SEPARATOR);
     
+    // Skip comment lines where first non-empty cell starts with #
+    // Note: Completely empty lines are already skipped by ConfigLineIterator
+    for cell in &cells {
+        if !cell.is_empty() {
+            if cell.starts_with('#') {
+                return Ok(());
+            }
+            break; // Found first non-empty cell that doesn't start with #
+        }
+    }
     
-    // Handle config lines (first field is empty, indicating it starts with separator)
-    if fields.len() >= 2 && fields[0].trim().is_empty() {
+    // Handle config lines (first cell is empty, indicating it starts with separator)
+    if cells[0].is_empty() {
         // This is a config line
-        if fields.len() >= 3 {
+        if cells.len() >= 3 {
             // Format: * KEY * VALUE
-            config.set_from_string(fields[1].trim(), fields[2].trim().to_string());
+            config.set_from_string(&cells[1], cells[2].clone());
         }
         return Ok(());
     }
     
+    // Process normal repository specification
+    process_repo_specification(config, &cells)
+}
+
+/// Process a repository specification from the parsed cells
+fn process_repo_specification(config: &mut Config, fields: &[String]) -> Result<()> {
     // Get repository paths from fields
     let remote_rel_raw = &fields[0];
     let local_rel_raw = if fields.len() > 1 { &fields[1] } else { "" };
@@ -262,7 +272,8 @@ fn process_repo_line(config: &mut Config, line: &str) -> Result<()> {
         None => "",
     };
     
-    // Unescape all paths - do this once and store as String
+    // Unescape all paths - this is still needed as ConfigLineIterator
+    // doesn't handle the escaping within cells
     let remote_rel_unescaped = unescape_backslashes(remote_rel_raw);
     
     // Apply defaults and unescape
