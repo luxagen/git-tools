@@ -88,7 +88,12 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     // Helper to avoid duplicating unwrap_or for media path
     let configure_repo = |should_configure: bool| -> Result<()> {
         if should_configure {
-            repository::configure_repo(local_path, media_path, config)?;
+            let repo = RepoSpec {
+                remote_rel: remote_rel_path,
+                local_rel: local_path,
+                media_rel: media_path,
+            };
+            repository::configure_repo(&repo, config)?;
         }
         Ok(())
     };
@@ -110,7 +115,12 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         }
         
         // Clone, configure, and checkout
-        repository::clone_repo_no_checkout(local_path, &get_remote_url(config, remote_rel_path))?;
+        let repo = RepoSpec {
+            remote_rel: &get_remote_url(config, remote_rel_path),
+            local_rel: local_path,
+            media_rel: media_path,
+        };
+        repository::clone_repo_no_checkout(&repo)?;
         configure_repo(true)?;
         repository::check_out(local_path)?;
         
@@ -143,7 +153,12 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         
         // Update remote and configure
         if operations.set_remote {
-            repository::set_remote(local_path, &get_remote_url(config, remote_rel_path))?;
+            let repo = RepoSpec {
+                remote_rel: &get_remote_url(config, remote_rel_path),
+                local_rel: local_path,
+                media_rel: media_path,
+            };
+            repository::set_remote(&repo)?;
         }
         
         configure_repo(operations.configure)?;
@@ -171,7 +186,12 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     if path.exists() && operations.new {
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
         
-        repository::create_new(local_path, remote_rel_path, config)?;
+        let repo = RepoSpec {
+            remote_rel: remote_rel_path,
+            local_rel: local_path,
+            media_rel: media_path,
+        };
+        repository::create_new(&repo, config)?;
         eprintln!("{} created", prefixed_local_path);
     } else {
         // Directory doesn't exist, just skip it

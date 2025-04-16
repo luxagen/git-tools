@@ -78,56 +78,39 @@ fn git_fetch(local_path: &str, remote: &str) -> Result<()> {
 }
 
 /// Clone a repository without checking it out
-pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> {
-    println!("Cloning repository \"{}\" into \"{}\"", remote_url, local_path);
-    
-    // Run git clone without a working directory
-    // Pass the local_path as a Path to avoid shell escaping issues
+pub fn clone_repo_no_checkout(repo: &RepoSpec) -> Result<()> {
+    println!("Cloning repository \"{}\" into \"{}\"", repo.remote_rel, repo.local_rel);
     let status = Command::new("git")
         .arg("clone")
         .arg("--no-checkout")
-        .arg(remote_url)
-        .arg(Path::new(local_path))
+        .arg(repo.remote_rel)
+        .arg(Path::new(repo.local_rel))
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit()) 
         .stderr(std::process::Stdio::inherit())
         .status()
-        .with_context(|| format!("Failed to execute clone: {}", remote_url))?;
-    
+        .with_context(|| format!("Failed to execute clone: {}", repo.remote_rel))?;
     if !status.success() {
         return Err(anyhow!("Git clone failed with exit code: {:?}", status));
     }
-    
     Ok(())
 }
 
 /// Configure a repository using the provided command
 
-pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
-    let repo = RepoSpec {
-        remote_rel: "", // Not used in config
-        local_rel: local_path,
-        media_rel: media_path,
-    };
-    execute_config_cmd(&repo, config)
+pub fn configure_repo(repo: &RepoSpec, config: &Config) -> Result<()> {
+    execute_config_cmd(repo, config)
 }
 
 /// Update the remote URL for a repository
-pub fn set_remote(local_path: &str, remote_url: &str) -> Result<()> {
-    // Try to update the remote first, suppressing output
-    // We use run_git_cmd_silent to avoid printing errors if this fails
-    let status = process::run_command_silent(local_path, &["git", "remote", "set-url", "origin", remote_url])?;
-    
-    // If remote update failed with exit code 2 (non-existent remote), try to add it
-    // This matches the Perl version's check for 512 (which is 2 << 8 in Perl's exit code handling)
+pub fn set_remote(repo: &RepoSpec) -> Result<()> {
+    let status = process::run_command_silent(repo.local_rel, &["git", "remote", "set-url", "origin", repo.remote_rel])?;
     if status == 2 {
         println!("Adding remote origin");
-        run_git_cmd_internal(local_path, &["remote", "add", "-f", "origin", remote_url])?;
+        run_git_cmd_internal(repo.local_rel, &["remote", "add", "-f", "origin", repo.remote_rel])?;
     } else if status != 0 {
-        // Other non-zero exit codes are still errors
         return Err(anyhow!("Failed to set remote with exit code: {}", status));
     }
-    
     Ok(())
 }
 
@@ -142,17 +125,17 @@ pub fn check_out(local_path: &str) -> Result<()> {
 }
 
 /// Add a git remote - used for new repositories
-fn add_git_remote(local_path: &str, remote_url: &str) -> Result<()> {
+fn add_git_remote(repo: &RepoSpec) -> Result<()> {
     println!("Adding remote origin");
-    run_git_cmd_internal(local_path, &["remote", "add", "-f", "origin", remote_url])?;
-    
+    run_git_cmd_internal(repo.local_rel, &["remote", "add", "-f", "origin", repo.remote_rel])?;
     Ok(())
 }
 
 /// Create a new repository 
-pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> Result<()> {
-    let remote_rel_path_str = remote_rel_path;
-    println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_rel_path_str);
+pub fn create_new(repo: &RepoSpec, config: &Config) -> Result<()> {
+    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_rel, repo.remote_rel);
+    let local_path = repo.local_rel;
+    let remote_rel_path = repo.remote_rel;
     
     // Check required configuration
     let rpath_template = if config.rpath_template.is_empty() {
@@ -186,7 +169,7 @@ pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> R
     let is_virgin_repo = !Path::new(local_path).join(".git").exists();
     
     // Construct remote path with .git extension
-    let mut grm_rpath = format!("{}/{}", rpath_base, remote_rel_path_str);
+    let mut grm_rpath = format!("{}/{}", rpath_base, remote_rel_path);
     if !grm_rpath.ends_with(".git") {
         grm_rpath.push_str(".git");
     }
@@ -239,7 +222,12 @@ pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> R
     let git_remote = format!("{}{}", effective_login, grm_rpath);
     
     // Add the remote
-    add_git_remote(local_path, &git_remote)?;
+    let add_remote_repo = RepoSpec {
+        remote_rel: &git_remote,
+        local_rel: local_path,
+        media_rel: repo.media_rel,
+    };
+    add_git_remote(&add_remote_repo)?;
     
     // Checkout master if this was a new repository
     if is_virgin_repo {
