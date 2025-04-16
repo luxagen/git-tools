@@ -59,21 +59,21 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_path: &str) -> Result<()> {
     // Use the recurse prefix directly from the config
     let prefixed_local_path = format!("{}{}", config.recurse_prefix, local_path);
-    
+
     // Get operations
     let operations = get_operations();
-    
+
     // Different behavior based on mode flags
     if operations.list_rrel {
         println!("{}", remote_rel_path);
         return Ok(());
     }
-    
+
     if operations.list_lrel {
         println!("{}", prefixed_local_path);
         return Ok(());
     }
-    
+
     if operations.list_rurl {
         // Generate remote URL using only the remote relative path
         println!("{}", get_remote_url(config, remote_rel_path));
@@ -181,11 +181,11 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     
     // In "new" mode, we want to create git repositories for existing directories
     // registered in a listfile that aren't git repositories yet
-    
+
     // Only create a repository if the directory exists
     if path.exists() && operations.new {
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
-        
+
         let repo = RepoSpec {
             remote_rel: remote_rel_path,
             local_rel: local_path,
@@ -197,7 +197,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         // Directory doesn't exist, just skip it
         eprintln!("{} does not exist (skipping)", prefixed_local_path);
     }
-    
+
     Ok(())
 }
 
