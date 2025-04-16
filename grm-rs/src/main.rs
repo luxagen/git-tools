@@ -257,6 +257,12 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     process_repo_cells(config, cells)
 }
 
+struct RepoSpec<'a> {
+    remote_rel: &'a str,
+    local_rel: &'a str,
+    media_rel: &'a str,
+}
+
 /// Process cells as a repository specification
 fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     // We already know cells is not empty from process_repo_line check
