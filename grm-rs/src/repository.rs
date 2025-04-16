@@ -7,10 +7,10 @@ use crate::process;
 
 // Shared repository specification struct
 #[derive(Debug, Clone)]
-pub struct RepoSpec<'a> {
-    pub remote_rel: &'a str,
-    pub local_rel: &'a str,
-    pub media_rel: &'a str,
+pub struct RepoTriple<'a> {
+    pub remote: &'a str,
+    pub local: &'a str,
+    pub media: &'a str,
 }
 
 /// Check if directory is a Git repository root
@@ -78,18 +78,18 @@ fn git_fetch(local_path: &str, remote: &str) -> Result<()> {
 }
 
 /// Clone a repository without checking it out
-pub fn clone_repo_no_checkout(repo: &RepoSpec) -> Result<()> {
-    println!("Cloning repository \"{}\" into \"{}\"", repo.remote_rel, repo.local_rel);
+pub fn clone_repo_no_checkout(repo: &RepoTriple) -> Result<()> {
+    println!("Cloning repository \"{}\" into \"{}\"", repo.remote, repo.local);
     let status = Command::new("git")
         .arg("clone")
         .arg("--no-checkout")
-        .arg(repo.remote_rel)
-        .arg(Path::new(repo.local_rel))
+        .arg(repo.remote)
+        .arg(Path::new(repo.local))
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit()) 
         .stderr(std::process::Stdio::inherit())
         .status()
-        .with_context(|| format!("Failed to execute clone: {}", repo.remote_rel))?;
+        .with_context(|| format!("Failed to execute clone: {}", repo.remote))?;
     if !status.success() {
         return Err(anyhow!("Git clone failed with exit code: {:?}", status));
     }
@@ -98,16 +98,16 @@ pub fn clone_repo_no_checkout(repo: &RepoSpec) -> Result<()> {
 
 /// Configure a repository using the provided command
 
-pub fn configure_repo(repo: &RepoSpec, config: &Config) -> Result<()> {
+pub fn configure_repo(repo: &RepoTriple, config: &Config) -> Result<()> {
     execute_config_cmd(repo, config)
 }
 
 /// Update the remote URL for a repository
-pub fn set_remote(repo: &RepoSpec) -> Result<()> {
-    let status = process::run_command_silent(repo.local_rel, &["git", "remote", "set-url", "origin", repo.remote_rel])?;
+pub fn set_remote(repo: &RepoTriple) -> Result<()> {
+    let status = process::run_command_silent(repo.local, &["git", "remote", "set-url", "origin", repo.remote])?;
     if status == 2 {
         println!("Adding remote origin");
-        run_git_cmd_internal(repo.local_rel, &["remote", "add", "-f", "origin", repo.remote_rel])?;
+        run_git_cmd_internal(repo.local, &["remote", "add", "-f", "origin", repo.remote])?;
     } else if status != 0 {
         return Err(anyhow!("Failed to set remote with exit code: {}", status));
     }
@@ -125,17 +125,17 @@ pub fn check_out(local_path: &str) -> Result<()> {
 }
 
 /// Add a git remote - used for new repositories
-fn add_git_remote(repo: &RepoSpec) -> Result<()> {
+fn add_git_remote(repo: &RepoTriple) -> Result<()> {
     println!("Adding remote origin");
-    run_git_cmd_internal(repo.local_rel, &["remote", "add", "-f", "origin", repo.remote_rel])?;
+    run_git_cmd_internal(repo.local, &["remote", "add", "-f", "origin", repo.remote])?;
     Ok(())
 }
 
 /// Create a new repository 
-pub fn create_new(repo: &RepoSpec, config: &Config) -> Result<()> {
-    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_rel, repo.remote_rel);
-    let local_path = repo.local_rel;
-    let remote_rel_path = repo.remote_rel;
+pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<()> {
+    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local, repo.remote);
+    let local_path = repo.local;
+    let remote_rel_path = repo.remote;
     
     // Check required configuration
     let rpath_template = if config.rpath_template.is_empty() {
@@ -211,10 +211,10 @@ pub fn create_new(repo: &RepoSpec, config: &Config) -> Result<()> {
     let media_path = crate::get_media_repo_path(config, remote_rel_path);
     
     // Configure the repository
-    let repo = RepoSpec {
-        remote_rel: remote_rel_path,
-        local_rel: local_path,
-        media_rel: &media_path,
+    let repo = RepoTriple {
+        remote: remote_rel_path,
+        local: local_path,
+        media: &media_path,
     };
     execute_config_cmd(&repo, config)?;
     
@@ -222,10 +222,10 @@ pub fn create_new(repo: &RepoSpec, config: &Config) -> Result<()> {
     let git_remote = format!("{}{}", effective_login, grm_rpath);
     
     // Add the remote
-    let add_remote_repo = RepoSpec {
-        remote_rel: &git_remote,
-        local_rel: local_path,
-        media_rel: repo.media_rel,
+    let add_remote_repo = RepoTriple {
+        remote: &git_remote,
+        local: local_path,
+        media: repo.media,
     };
     add_git_remote(&add_remote_repo)?;
     
@@ -273,13 +273,13 @@ fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
 
 /// Execute a CONFIG_CMD in the specified directory
 
-fn execute_config_cmd(repo: &RepoSpec, config: &Config) -> Result<()> {
+fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
     let config_cmd = &config.config_cmd;
     if config_cmd.is_empty() {
         return Ok(()); // No command to execute
     }
     // Append the media_path to the config command as a command-line argument
-    let full_command = format!("{} {}", config_cmd, repo.media_rel);
+    let full_command = format!("{} {}", config_cmd, repo.media);
     
     // Try to detect the shell environment
     let shell_cmd = detect_shell_command(&full_command)?;
@@ -287,7 +287,7 @@ fn execute_config_cmd(repo: &RepoSpec, config: &Config) -> Result<()> {
     // Execute through the detected shell
     let status = Command::new(shell_cmd.executable)
         .args(&shell_cmd.args)
-        .current_dir(repo.local_rel)
+        .current_dir(repo.local)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
