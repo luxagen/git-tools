@@ -270,7 +270,35 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     
     // Get RepoTriple from cells and process it
     let repo_spec = get_repo_triple(&cells)?;
-    process_repo_cells(config, &repo_spec)
+    
+    // Filter out repositories that are not in or below the current directory
+    let tree_filter = &config.tree_filter;
+    if !tree_filter.is_empty() {
+        // Get the absolute path from the current directory
+        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+        let abs_local_path = current_dir.join(&repo_spec.local);
+        let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
+        let tree_filter_str = tree_filter.replace('\\', "/");
+        
+        // Check if the absolute path contains our original directory
+        if !abs_local_str.contains(&tree_filter_str) {
+            if get_operations().debug {
+                eprintln!("Skipping repository outside tree filter: {} (not in {})", &repo_spec.local, tree_filter_str);
+            }
+            return Ok(());
+        }
+    }
+    
+    if get_operations().debug {
+        eprintln!("Potential target: {}", &repo_spec.local);
+    }
+    
+    // Process the repository using the RepoTriple directly
+    if let Err(err) = process_repo(config, &repo_spec) {
+        eprintln!("Error processing {}: {}", &repo_spec.local, err);
+    }
+    
+    Ok(())
 }
 
 // Use the shared RepoTriple from repository.rs
@@ -300,39 +328,6 @@ fn get_repo_triple<'a>(cells: &'a Vec<String>) -> Result<RepoTriple<'a>> {
     };
     
     Ok(RepoTriple { remote: &remote_rel, local: &local_rel, media: &media_rel })
-}
-/// Process cells as a repository specification
-fn process_repo_cells(config: &mut Config, repo_spec: &RepoTriple) -> Result<()> {
-    // We already know we have a valid RepoTriple
-    
-    // Filter out repositories that are not in or below the current directory
-    let tree_filter = &config.tree_filter;
-    if !tree_filter.is_empty() {
-        // Get the absolute path from the current directory
-        let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
-        let abs_local_path = current_dir.join(&repo_spec.local);
-        let abs_local_str = abs_local_path.to_string_lossy().replace('\\', "/");
-        let tree_filter_str = tree_filter.replace('\\', "/");
-        
-        // Check if the absolute path contains our original directory
-        if !abs_local_str.contains(&tree_filter_str) {
-            if get_operations().debug {
-                eprintln!("Skipping repository outside tree filter: {} (not in {})", &repo_spec.local, tree_filter_str);
-            }
-            return Ok(());
-        }
-    }
-    
-    if get_operations().debug {
-        eprintln!("Potential target: {}", &repo_spec.local);
-    }
-    
-    // Process the repository using the RepoTriple directly
-    if let Err(err) = process_repo(config, repo_spec) {
-        eprintln!("Error processing {}: {}", &repo_spec.local, err);
-    }
-    
-    Ok(())
 }
 
 /// Split a line by separator character, respecting escaped separators
