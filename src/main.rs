@@ -66,6 +66,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get local path info
     let path = Path::new(repo.local);
     
+    // Flag to determine if we need to checkout master at the end
+    let mut needs_checkout = false;
+    
     // Handle 'new' operation first - it's mutually exclusive with all others
     if operations.new {
         // Check if path exists and is a directory
@@ -95,26 +98,13 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         
         // Create new repo
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
-        let is_virgin_repo = repository::create_new(repo, config)?;
+        needs_checkout = repository::create_new(repo, config)?;
         
-        // Get the URL version of repo for configuration and remote
-        let url_repo = RepoTriple {
-            remote: &get_remote_url(config, repo.remote),
-            local: repo.local,
-            media: repo.media,
-        };
-        
-        // Configure and set remote (same operations as for existing repos)
-        repository::execute_config_cmd(&url_repo, config)?;
-        repository::add_git_remote(&url_repo)?;
-        
-        // Checkout master if this was a virgin repository
-        if is_virgin_repo {
-            repository::run_git_command(repo.local, "checkout master")?;
-        }
-        
+        // Use the original repo in URL form for the following operations
+        // Will fall through to the shared repository processing logic
+        operations.configure = true;
+        operations.set_remote = true;
         eprintln!("{} created", prefixed_local_path);
-        return Ok(());
     }
     
     // Handle list_rrel first since it needs the original repo.remote
@@ -124,7 +114,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     }
     
     // For all other operations, use the remote URL instead of the relative path
-    // Redefine repo to use the URL version
+    // Redefine repo to use the URL version for other operations
     let repo = RepoTriple {
         remote: &get_remote_url(config, repo.remote),
         local: repo.local,
@@ -187,7 +177,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     
     if is_repo {
         // Get remote URL
-        eprintln!("{} exists", prefixed_local_path);
+        if !operations.new { // Don't print this for new repos (already did)
+            eprintln!("{} exists", prefixed_local_path);
+        }
         
         // Configure first, then update remote
         configure_repo(operations.configure)?;
@@ -201,6 +193,11 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
             if !config.git_args.is_empty() {
                 repository::run_git_command(repo.local, &config.git_args)?;
             }
+        }
+        
+        // Checkout master if needed (for new repositories)
+        if needs_checkout {
+            repository::run_git_command(repo.local, "checkout master")?;
         }
         
         return Ok(());

@@ -125,14 +125,15 @@ pub fn check_out(local_path: &str) -> Result<()> {
 }
 
 /// Add a git remote - used for new repositories
-fn add_git_remote(repo: &RepoTriple) -> Result<()> {
+pub fn add_git_remote(repo: &RepoTriple) -> Result<()> {
     println!("Adding remote origin");
     run_git_cmd_internal(repo.local, &["remote", "add", "-f", "origin", repo.remote])?;
     Ok(())
 }
 
-/// Create a new repository 
-pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<()> {
+/// Create a new repository
+/// Returns true if this was a virgin (newly initialized) repository that needs a checkout after the remote is added
+pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<bool> {
     println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local, repo.remote);
     let local_path = repo.local;
     let remote_rel_path = repo.remote;
@@ -157,10 +158,10 @@ pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<()> {
     };
     
     // Parse SSH host
-    let (ssh_host, effective_login) = if rlogin.is_empty() {
-        ("localhost", "ssh://localhost".to_string())
+    let ssh_host = if rlogin.is_empty() {
+        "localhost"
     } else if let Some(host) = rlogin.strip_prefix("ssh://") {
-        (host, rlogin.clone())
+        host
     } else {
         return Err(anyhow!("RLOGIN must be in format 'ssh://[user@]host' for SSH remote creation"));
     };
@@ -182,7 +183,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<()> {
     
     if !input.trim().eq_ignore_ascii_case("y") {
         println!("(aborted)");
-        return Ok(());
+        return Ok(false);
     }
     
     // Create remote repo based on template
@@ -207,35 +208,8 @@ pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<()> {
     // Initialize git repository
     init_git_repository(local_path)?;
     
-    // Use the helper function to generate the media path
-    let media_path = crate::get_media_repo_path(config, remote_rel_path);
-    
-    // Configure the repository
-    let repo = RepoTriple {
-        remote: remote_rel_path,
-        local: local_path,
-        media: &media_path,
-    };
-    execute_config_cmd(&repo, config)?;
-    
-    // Git remote URL
-    let git_remote = format!("{}{}", effective_login, grm_rpath);
-    
-    // Add the remote
-    let add_remote_repo = RepoTriple {
-        remote: &git_remote,
-        local: local_path,
-        media: repo.media,
-    };
-    add_git_remote(&add_remote_repo)?;
-    
-    // Checkout master if this was a new repository
-    if is_virgin_repo {
-        run_git_cmd_internal(local_path, &["checkout", "master"])?;
-    }
-    
     println!("Repository created successfully");
-    Ok(())
+    Ok(is_virgin_repo)
 }
 
 /// Run a git command in the repository (public function called from main.rs)
@@ -272,8 +246,7 @@ fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
 }
 
 /// Execute a CONFIG_CMD in the specified directory
-
-fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
+pub fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
     let config_cmd = &config.config_cmd;
     if config_cmd.is_empty() {
         return Ok(()); // No command to execute
