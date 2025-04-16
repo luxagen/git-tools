@@ -275,10 +275,7 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
 // Use the shared RepoTriple from repository.rs
 use crate::repository::RepoTriple;
 
-/// Process cells as a repository specification
-fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
-    // We already know cells is not empty from process_repo_line check
-    
+fn do_thing(cells:Vec<String>) -> Result<(String,String,String)> {
     // First cell is always the remote relative path
     let remote_rel = cells[0].clone();
     
@@ -288,11 +285,10 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     } else {
         // Extract repo name from remote path for default values
         let re = Regex::new(r"([^/]+?)(?:\.git)?$").unwrap();
-        let repo_name = match re.captures(&remote_rel) {
+        match re.captures(&remote_rel) {
             Some(caps) => caps.get(1).map_or("", |m| m.as_str()).to_string(),
             None => String::new(),
-        };
-        repo_name.clone()
+        }
     };
     
     // Third cell is media relative path, defaults to local_rel if empty or missing
@@ -302,6 +298,13 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
         local_rel.clone()
     };
     
+    Ok((remote_rel, local_rel, media_rel))
+}
+/// Process cells as a repository specification
+fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
+    // We already know cells is not empty from process_repo_line check
+
+    let (remote_rel, local_rel, media_rel) = do_thing(cells)?;
     // Create a RepoTriple with references to our strings
     let repo_spec = RepoTriple {
         remote: &remote_rel,
