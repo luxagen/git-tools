@@ -157,7 +157,7 @@ impl Config {
 
     // - return an error if the file cannot be opened or read
     // 
-    // TODO Why to_string()?
+
     /// Load configuration from a file
     pub fn load_from_file(&mut self, path: &Path) -> Result<()> {
         let iter = ConfigLineIterator::from_file(path)?;
