@@ -195,8 +195,6 @@ impl Config {
         Ok(())
     }
 
-    // TODO Why not take &str for both? Barf on unknown keys?
-
     /// Set a configuration value from string key and value
     pub fn set_from_string(&mut self, key: &str, value: String) {
         match key {
