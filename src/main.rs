@@ -88,10 +88,10 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     // Helper to avoid duplicating unwrap_or for media path
     let configure_repo = |should_configure: bool| -> Result<()> {
         if should_configure {
-            let repo = RepoSpec {
-                remote_rel: remote_rel_path,
-                local_rel: local_path,
-                media_rel: media_path,
+            let repo = RepoTriple {
+                remote: remote_rel_path,
+                local: local_path,
+                media: media_path,
             };
             repository::configure_repo(&repo, config)?;
         }
@@ -115,10 +115,10 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         }
         
         // Clone, configure, and checkout
-        let repo = RepoSpec {
-            remote_rel: &get_remote_url(config, remote_rel_path),
-            local_rel: local_path,
-            media_rel: media_path,
+        let repo = RepoTriple {
+            remote: &get_remote_url(config, remote_rel_path),
+            local: local_path,
+            media: media_path,
         };
         repository::clone_repo_no_checkout(&repo)?;
         configure_repo(true)?;
@@ -153,10 +153,10 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
         
         // Update remote and configure
         if operations.set_remote {
-            let repo = RepoSpec {
-                remote_rel: &get_remote_url(config, remote_rel_path),
-                local_rel: local_path,
-                media_rel: media_path,
+            let repo = RepoTriple {
+                remote: &get_remote_url(config, remote_rel_path),
+                local: local_path,
+                media: media_path,
             };
             repository::set_remote(&repo)?;
         }
@@ -186,10 +186,10 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     if path.exists() && operations.new {
         eprintln!("Creating new Git repository in {}", prefixed_local_path);
 
-        let repo = RepoSpec {
-            remote_rel: remote_rel_path,
-            local_rel: local_path,
-            media_rel: media_path,
+        let repo = RepoTriple {
+            remote: remote_rel_path,
+            local: local_path,
+            media: media_path,
         };
         repository::create_new(&repo, config)?;
         eprintln!("{} created", prefixed_local_path);
@@ -277,8 +277,8 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     process_repo_cells(config, cells)
 }
 
-// Use the shared RepoSpec from repository.rs
-use crate::repository::RepoSpec;
+// Use the shared RepoTriple from repository.rs
+use crate::repository::RepoTriple;
 
 /// Process cells as a repository specification
 fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
@@ -308,16 +308,16 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
         local_rel.clone()
     };
     
-    // Create a RepoSpec with references to our strings
-    let repo_spec = RepoSpec {
-        remote_rel: &remote_rel,
-        local_rel: &local_rel,
-        media_rel: &media_rel,
+    // Create a RepoTriple with references to our strings
+    let repo_spec = RepoTriple {
+        remote: &remote_rel,
+        local: &local_rel,
+        media: &media_rel,
     };
     
-    // Get directory values from config using the RepoSpec
-    let local_path = get_local_repo_path(config, repo_spec.local_rel);
-    let media_path = get_media_repo_path(config, repo_spec.media_rel);
+    // Get directory values from config using the RepoTriple
+    let local_path = get_local_repo_path(config, repo_spec.local);
+    let media_path = get_media_repo_path(config, repo_spec.media);
     
     // Filter out repositories that are not in or below the current directory
     let tree_filter = &config.tree_filter;
@@ -342,7 +342,7 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &local_path, repo_spec.remote_rel, &media_path) {
+    if let Err(err) = process_repo(config, &local_path, repo_spec.remote, &media_path) {
         eprintln!("Error processing {}: {}", &local_path, err);
     }
     
