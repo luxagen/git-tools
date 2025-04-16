@@ -257,11 +257,8 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     process_repo_cells(config, cells)
 }
 
-struct RepoSpec<'a> {
-    remote_rel: &'a str,
-    local_rel: &'a str,
-    media_rel: &'a str,
-}
+// Use the shared RepoSpec from repository.rs
+use crate::repository::RepoSpec;
 
 /// Process cells as a repository specification
 fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
