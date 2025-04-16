@@ -141,17 +141,23 @@ pub fn create_new(local_path: &str, remote_rel_path: Option<&str>, config: &Conf
     println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_rel_path_str);
     
     // Check required configuration
-    let rpath_template = config.rpath_template
-        .as_ref()
-        .ok_or_else(|| anyhow!("RPATH_TEMPLATE not set in configuration"))?;
-    
-    let rlogin = config.rlogin
-        .as_ref()
-        .ok_or_else(|| anyhow!("RLOGIN not set in configuration"))?;
-    
-    let rpath_base = config.rpath_base
-        .as_ref()
-        .ok_or_else(|| anyhow!("RPATH_BASE not set in configuration"))?;
+    let rpath_template = if config.rpath_template.is_empty() {
+        return Err(anyhow!("RPATH_TEMPLATE not set in configuration"));
+    } else {
+        &config.rpath_template
+    };
+
+    let rlogin = if config.rlogin.is_empty() {
+        return Err(anyhow!("RLOGIN not set in configuration"));
+    } else {
+        &config.rlogin
+    };
+
+    let rpath_base = if config.rpath_base.is_empty() {
+        return Err(anyhow!("RPATH_BASE not set in configuration"));
+    } else {
+        &config.rpath_base
+    };
     
     // Parse SSH host
     let (ssh_host, effective_login) = if rlogin.is_empty() {
@@ -260,11 +266,10 @@ fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
 
 /// Execute a CONFIG_CMD in the specified directory
 fn execute_config_cmd(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
-    let config_cmd = match &config.config_cmd {
-        Some(cmd) if !cmd.is_empty() => cmd,
-        _ => return Ok(()), // No command to execute
-    };
-    
+    let config_cmd = &config.config_cmd;
+    if config_cmd.is_empty() {
+        return Ok(()); // No command to execute
+    }
     // Append the media_path to the config command as a command-line argument
     let full_command = format!("{} {}", config_cmd, media_path);
     
