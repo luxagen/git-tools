@@ -175,7 +175,9 @@ impl Config {
                 return Err(anyhow!("Repository specification found in config file: {:?}", cells));
             }
 
-            if cells[2].is_empty() || cells[3].is_empty() {
+            // Only need to check that key (cells[1]) is not empty
+            // cells[2] can be empty (which means the config value should be emptied)
+            if cells[1].is_empty() {
                 return Err(anyhow!("Config line has empty key or value: {:?}", cells));
             }
             
