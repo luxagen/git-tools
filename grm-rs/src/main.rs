@@ -107,7 +107,8 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     }
     
     // For all other operations, use the remote URL instead of the relative path
-    let url_repo = RepoTriple {
+    // Redefine repo to use the URL version
+    let repo = RepoTriple {
         remote: &get_remote_url(config, repo.remote),
         local: repo.local,
         media: repo.media,
@@ -119,7 +120,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     }
 
     if operations.list_rurl {
-        println!("{}", url_repo.remote); // Use url_repo.remote for URL
+        println!("{}", repo.remote); // Use repo.remote which now contains the URL
         return Ok(());
     }
     
@@ -131,7 +132,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Helper to avoid duplicating unwrap_or for media path
     let configure_repo = |should_configure: bool| -> Result<()> {
         if should_configure {
-            repository::configure_repo(&url_repo, config)?
+            repository::configure_repo(&repo, config)?
         }
         Ok(())
     };
@@ -145,7 +146,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         }
         
         // Clone, configure, and checkout
-        repository::clone_repo_no_checkout(&url_repo)?;
+        repository::clone_repo_no_checkout(&repo)?;
         configure_repo(true)?;
         repository::check_out(repo.local)?;
         
@@ -173,7 +174,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         
         // Update remote and configure
         if operations.set_remote {
-            repository::set_remote(&url_repo)?;
+            repository::set_remote(&repo)?;
         }
         
         configure_repo(operations.configure)?;
