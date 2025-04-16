@@ -163,8 +163,19 @@ impl Config {
         let iter = ConfigLineIterator::from_file(path)?;
         
         for cells in iter {
-            if cells.len() >= 2 {
-                self.set_from_string(cells[0].clone(), cells[1].clone());
+            // Error if line contains more than 3 cells
+            if cells.len() > 3 {
+                return Err(anyhow!("Config line has too many columns: {:?}", cells));
+            }
+            
+            // Error if the first cell is not empty (not a config line)
+            if !cells[0].is_empty() {
+                return Err(anyhow!("Repository specification found in config file: {:?}", cells));
+            }
+            
+            // We need at least 3 cells for key and value
+            if cells.len() == 3 {
+                self.set_from_string(cells[1].clone(), cells[2].clone());
             }
         }
         
