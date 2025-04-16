@@ -166,13 +166,17 @@ impl Config {
 
         for mut cells in iter {
             // Error if line contains more than 3 cells
-            if cells.len() > 3 {
-                return Err(anyhow!("Config line has too many columns: {:?}", cells));
+            if cells.len() != 3 {
+                return Err(anyhow!("Config line has {} columns instead of the required 3", cells.len()));
             }
-            
+
             // Error if the first cell is not empty (not a config line)
             if !cells[0].is_empty() {
                 return Err(anyhow!("Repository specification found in config file: {:?}", cells));
+            }
+
+            if cells[2].is_empty() || cells[3].is_empty() {
+                return Err(anyhow!("Config line has empty key or value: {:?}", cells));
             }
             
             // We need at least 3 cells for key and value
