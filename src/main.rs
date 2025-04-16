@@ -291,9 +291,16 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
         local_rel.clone()
     };
     
-    // Get directory values from config
-    let local_path = get_local_repo_path(config, Some(&local_rel));
-    let media_path = get_media_repo_path(config, Some(&media_rel));
+    // Create a RepoSpec with references to our strings
+    let repo_spec = RepoSpec {
+        remote_rel: &remote_rel,
+        local_rel: &local_rel,
+        media_rel: &media_rel,
+    };
+    
+    // Get directory values from config using the RepoSpec
+    let local_path = get_local_repo_path(config, Some(repo_spec.local_rel));
+    let media_path = get_media_repo_path(config, Some(repo_spec.media_rel));
     
     // Filter out repositories that are not in or below the current directory
     if let Some(tree_filter) = &config.tree_filter {
@@ -317,7 +324,7 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &local_path, Some(&remote_rel), Some(&media_path)) {
+    if let Err(err) = process_repo(config, &local_path, Some(repo_spec.remote_rel), Some(&media_path)) {
         eprintln!("Error processing {}: {}", &local_path, err);
     }
     
