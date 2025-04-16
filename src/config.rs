@@ -139,7 +139,7 @@ impl Config {
                 }
                 
                 // Set configuration value
-                self.set_from_string(conf_key.to_string(), value);
+                self.set_from_string(conf_key, value);
             }
         }
     }
@@ -175,11 +175,14 @@ impl Config {
             
             // We need at least 3 cells for key and value
             if cells.len() == 3 {
-                // Move both values out of the vector without cloning
+                // Move both values out of the vector first
                 let key = std::mem::replace(&mut cells[1], String::new());
                 let value = std::mem::replace(&mut cells[2], String::new());
                 
-                self.set_from_string(key, value);
+                // Now that we own key, we can get a reference to it
+                let key_ref = key.as_str();
+                
+                self.set_from_string(key_ref, value);
             }
         }
         
@@ -189,8 +192,8 @@ impl Config {
     // TODO Why not take &str for both? Barf on unknown keys?
 
     /// Set a configuration value from string key and value
-    pub fn set_from_string(&mut self, key: String, value: String) {
-        match key.as_str() {
+    pub fn set_from_string(&mut self, key: &str, value: String) {
+        match key {
             "CONFIG_FILENAME" => self.config_filename = value,
             "LIST_FN" => self.list_filename = value,
             "OPT_RECURSE" => self.recurse_enabled = !value.is_empty(),
