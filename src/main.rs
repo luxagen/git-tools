@@ -268,8 +268,9 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
         return Ok(());
     }
     
-    // Process cells as repository specification with appropriate defaults
-    process_repo_cells(config, cells)
+    // Get RepoTriple from cells and process it
+    let repo_spec = get_repo_triple(&cells)?;
+    process_repo_cells(config, &repo_spec)
 }
 
 // Use the shared RepoTriple from repository.rs
@@ -301,10 +302,8 @@ fn get_repo_triple<'a>(cells: &'a Vec<String>) -> Result<RepoTriple<'a>> {
     Ok(RepoTriple { remote: &remote_rel, local: &local_rel, media: &media_rel })
 }
 /// Process cells as a repository specification
-fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
-    // We already know cells is not empty from process_repo_line check
-
-    let repo_spec = get_repo_triple(&cells)?;
+fn process_repo_cells(config: &mut Config, repo_spec: &RepoTriple) -> Result<()> {
+    // We already know we have a valid RepoTriple
     
     // Filter out repositories that are not in or below the current directory
     let tree_filter = &config.tree_filter;
@@ -329,7 +328,7 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     }
     
     // Process the repository using the RepoTriple directly
-    if let Err(err) = process_repo(config, &repo_spec) {
+    if let Err(err) = process_repo(config, repo_spec) {
         eprintln!("Error processing {}: {}", &repo_spec.local, err);
     }
     
