@@ -16,25 +16,25 @@ pub struct Config {
     /// Whether recursion is enabled (1 by default)
     pub recurse_enabled: bool,
     /// Remote login information (e.g., ssh://user@host)
-    pub rlogin: Option<String>,
+    pub rlogin: String,
     /// Remote path base directory
-    pub rpath_base: Option<String>,
+    pub rpath_base: String,
     /// Remote path template for new repositories
-    pub rpath_template: Option<String>,
+    pub rpath_template: String,
     /// Local base directory for repositories
-    pub local_dir: Option<String>,
+    pub local_dir: String,
     /// Media base directory
-    pub gm_dir: Option<String>,
+    pub gm_dir: String,
     /// Remote directory
-    pub remote_dir: Option<String>,
+    pub remote_dir: String,
     /// Git arguments when in git mode
-    pub git_args: Option<String>,
+    pub git_args: String,
     /// Command to execute for configuration
-    pub config_cmd: Option<String>,
+    pub config_cmd: String,
     /// Recurse prefix for path display
     pub recurse_prefix: String,
     /// Tree filter path for filtering repositories to current subtree
-    pub tree_filter: Option<String>,
+    pub tree_filter: String,
 }
 
 impl Config {
@@ -44,16 +44,16 @@ impl Config {
             config_filename: ".grm.conf".to_string(),
             list_filename: ".grm.repos".to_string(),
             recurse_enabled: true,
-            rlogin: None,
-            rpath_base: None,
-            rpath_template: None,
-            local_dir: None,
-            gm_dir: None,
-            remote_dir: None,
-            git_args: None,
-            config_cmd: None,
+            rlogin: String::new(),
+            rpath_base: String::new(),
+            rpath_template: String::new(),
+            local_dir: String::new(),
+            gm_dir: String::new(),
+            remote_dir: String::new(),
+            git_args: String::new(),
+            config_cmd: String::new(),
             recurse_prefix: String::new(),
-            tree_filter: None,
+            tree_filter: String::new(),
         }
     }
     
@@ -68,44 +68,44 @@ impl Config {
         result.push(("LIST_FN".to_string(), self.list_filename.clone()));
         result.push(("OPT_RECURSE".to_string(), if self.recurse_enabled { "1".to_string() } else { String::new() }));
         
-        if let Some(ref v) = self.rlogin {
-            result.push(("RLOGIN".to_string(), v.clone()));
+        if !self.rlogin.is_empty() {
+            result.push(("RLOGIN".to_string(), self.rlogin.clone()));
         }
         
-        if let Some(ref v) = self.rpath_base {
-            result.push(("RPATH_BASE".to_string(), v.clone()));
+        if !self.rpath_base.is_empty() {
+            result.push(("RPATH_BASE".to_string(), self.rpath_base.clone()));
         }
         
-        if let Some(ref v) = self.rpath_template {
-            result.push(("RPATH_TEMPLATE".to_string(), v.clone()));
+        if !self.rpath_template.is_empty() {
+            result.push(("RPATH_TEMPLATE".to_string(), self.rpath_template.clone()));
         }
         
-        if let Some(ref v) = self.local_dir {
-            result.push(("LOCAL_DIR".to_string(), v.clone()));
+        if !self.local_dir.is_empty() {
+            result.push(("LOCAL_DIR".to_string(), self.local_dir.clone()));
         }
         
-        if let Some(ref v) = self.gm_dir {
-            result.push(("GM_DIR".to_string(), v.clone()));
+        if !self.gm_dir.is_empty() {
+            result.push(("GM_DIR".to_string(), self.gm_dir.clone()));
         }
         
-        if let Some(ref v) = self.remote_dir {
-            result.push(("REMOTE_DIR".to_string(), v.clone()));
+        if !self.remote_dir.is_empty() {
+            result.push(("REMOTE_DIR".to_string(), self.remote_dir.clone()));
         }
         
-        if let Some(ref v) = self.git_args {
-            result.push(("GIT_ARGS".to_string(), v.clone()));
+        if !self.git_args.is_empty() {
+            result.push(("GIT_ARGS".to_string(), self.git_args.clone()));
         }
         
-        if let Some(ref v) = self.config_cmd {
-            result.push(("CONFIG_CMD".to_string(), v.clone()));
+        if !self.config_cmd.is_empty() {
+            result.push(("CONFIG_CMD".to_string(), self.config_cmd.clone()));
         }
         
         if !self.recurse_prefix.is_empty() {
             result.push(("RECURSE_PREFIX".to_string(), self.recurse_prefix.clone()));
         }
         
-        if let Some(ref v) = self.tree_filter {
-            result.push(("TREE_FILTER".to_string(), v.clone()));
+        if !self.tree_filter.is_empty() {
+            result.push(("TREE_FILTER".to_string(), self.tree_filter.clone()));
         }
         
         result
@@ -201,16 +201,16 @@ impl Config {
             "CONFIG_FILENAME" => self.config_filename = value,
             "LIST_FN" => self.list_filename = value,
             "OPT_RECURSE" => self.recurse_enabled = !value.is_empty(),
-            "RLOGIN" => self.rlogin = Some(value),
-            "RPATH_BASE" => self.rpath_base = Some(value),
-            "RPATH_TEMPLATE" => self.rpath_template = Some(value),
-            "LOCAL_DIR" => self.local_dir = Some(value),
-            "GM_DIR" => self.gm_dir = Some(value),
-            "REMOTE_DIR" => self.remote_dir = Some(value),
-            "GIT_ARGS" => self.git_args = Some(value),
-            "CONFIG_CMD" => self.config_cmd = Some(value),
+            "RLOGIN" => self.rlogin = value,
+            "RPATH_BASE" => self.rpath_base = value,
+            "RPATH_TEMPLATE" => self.rpath_template = value,
+            "LOCAL_DIR" => self.local_dir = value,
+            "GM_DIR" => self.gm_dir = value,
+            "REMOTE_DIR" => self.remote_dir = value,
+            "GIT_ARGS" => self.git_args = value,
+            "CONFIG_CMD" => self.config_cmd = value,
             "RECURSE_PREFIX" => self.recurse_prefix = value,
-            "TREE_FILTER" => self.tree_filter = Some(value),
+            "TREE_FILTER" => self.tree_filter = value,
             _ => {} // Ignore unknown keys
         }
     }

@@ -150,8 +150,8 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: Option<&str>
         
         if operations.git {
             // Execute git commands in the repository
-            if let Some(git_args) = &config.git_args {
-                repository::run_git_command(local_path, git_args)?;
+            if !config.git_args.is_empty() {
+                repository::run_git_command(local_path, &config.git_args)?;
             }
         }
         
@@ -303,7 +303,8 @@ fn process_repo_cells(config: &mut Config, cells: Vec<String>) -> Result<()> {
     let media_path = get_media_repo_path(config, repo_spec.media_rel);
     
     // Filter out repositories that are not in or below the current directory
-    if let Some(tree_filter) = &config.tree_filter {
+    let tree_filter = &config.tree_filter;
+    if !tree_filter.is_empty() {
         // Get the absolute path from the current directory
         let current_dir = env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
         let abs_local_path = current_dir.join(&local_path);
@@ -427,39 +428,36 @@ fn unescape_backslashes(s: &str) -> String {
 
 /// Get remote repository path from config and relative path
 pub fn get_remote_repo_path(config: &Config, repo_path: &str) -> String {
-    if let Some(remote_dir) = config.remote_dir.as_deref() {
-        if !remote_dir.is_empty() {
-            if !repo_path.is_empty() {
-                return format!("{}/{}", remote_dir, repo_path);
-            }
-            return remote_dir.to_string();
+    let remote_dir = &config.remote_dir;
+    if !remote_dir.is_empty() {
+        if !repo_path.is_empty() {
+            return format!("{}/{}", remote_dir, repo_path);
         }
+        return remote_dir.to_string();
     }
     repo_path.to_string()
 }
 
 /// Generate a complete media repository path by combining gm_dir and repo_path
 pub fn get_media_repo_path(config: &Config, repo_path: &str) -> String {
-    if let Some(gm_dir) = config.gm_dir.as_deref() {
-        if !gm_dir.is_empty() {
-            if !repo_path.is_empty() {
-                return format!("{}/{}", gm_dir, repo_path);
-            }
-            return gm_dir.to_string();
+    let gm_dir = &config.gm_dir;
+    if !gm_dir.is_empty() {
+        if !repo_path.is_empty() {
+            return format!("{}/{}", gm_dir, repo_path);
         }
+        return gm_dir.to_string();
     }
     repo_path.to_string()
 }
 
 /// Generate a complete local repository path by combining local_dir and repo_path
 pub fn get_local_repo_path(config: &Config, repo_path: &str) -> String {
-    if let Some(local_dir) = config.local_dir.as_deref() {
-        if !local_dir.is_empty() {
-            if !repo_path.is_empty() {
-                return format!("{}/{}", local_dir, repo_path);
-            }
-            return local_dir.to_string();
+    let local_dir = &config.local_dir;
+    if !local_dir.is_empty() {
+        if !repo_path.is_empty() {
+            return format!("{}/{}", local_dir, repo_path);
         }
+        return local_dir.to_string();
     }
     repo_path.to_string()
 }
@@ -467,26 +465,22 @@ pub fn get_local_repo_path(config: &Config, repo_path: &str) -> String {
 /// Get formatted remote URL based on configuration and remote relative path
 fn get_remote_url(config: &Config, remote_rel_path: Option<&str>) -> String {
     // Get the base path, defaulting to empty string if not set
-    let base_path = config.rpath_base.as_deref().unwrap_or("");
+    let base_path = &config.rpath_base;
     
     // Use the remote repo path function to handle paths consistently
     let full_repo_path = get_remote_repo_path(config, remote_rel_path.unwrap_or(""));
     
     // Choose URL format based on configuration
-    match &config.rlogin {
-        Some(login) if !login.is_empty() => {
-            // We have login information
-            remote_url::build_remote_url(Some(login), base_path, &full_repo_path)
-        },
-        _ => {
-            // No login info
-            remote_url::build_remote_url(None, base_path, &full_repo_path)
-        }
+    if !config.rlogin.is_empty() {
+        // We have login information
+        remote_url::build_remote_url(Some(&config.rlogin), base_path, &full_repo_path)
+    } else {
+        // No login info
+        remote_url::build_remote_url(None, base_path, &full_repo_path)
     }
 }
 
 fn main() -> Result<()> {
-    // Set MSYS_NO_PATHCONV=1 to prevent Windows Git path conversion issues
     std::env::set_var("MSYS_NO_PATHCONV", "1");
     
     // Save the original working directory to use as a tree filter (like $treeFilter in Perl)
@@ -512,7 +506,7 @@ fn main() -> Result<()> {
     // Store git command arguments if in git mode
     if args.mode.to_string() == "git" && !args.args.is_empty() {
         let git_args = args.args.join(" ");
-        config.git_args = Some(git_args);
+        config.git_args = git_args;
     }
     
     // Get listfile directory and path
@@ -523,7 +517,7 @@ fn main() -> Result<()> {
     env::set_current_dir(&list_dir)?;
     
     // Store original working directory for filtering
-    config.tree_filter = Some(tree_filter_str);
+    config.tree_filter = tree_filter_str;
     
     // Process listfile
     if list_path.exists() {
