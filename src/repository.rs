@@ -205,7 +205,7 @@ pub fn create_new(local_path: &str, remote_rel_path: Option<&str>, config: &Conf
     init_git_repository(local_path)?;
     
     // Use the helper function to generate the media path
-    let media_path = crate::get_media_repo_path(config, remote_rel_path);
+    let media_path = crate::get_media_repo_path(config, remote_rel_path.unwrap_or(""));
     
     // Configure the repository
     execute_config_cmd(local_path, &media_path, config)?;
