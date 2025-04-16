@@ -162,7 +162,7 @@ impl Config {
     pub fn load_from_file(&mut self, path: &Path) -> Result<()> {
         let iter = ConfigLineIterator::from_file(path)?;
         
-        for cells in iter {
+        for mut cells in iter {
             // Error if line contains more than 3 cells
             if cells.len() > 3 {
                 return Err(anyhow!("Config line has too many columns: {:?}", cells));
@@ -175,7 +175,11 @@ impl Config {
             
             // We need at least 3 cells for key and value
             if cells.len() == 3 {
-                self.set_from_string(cells[1].clone(), cells[2].clone());
+                // Move both values out of the vector without cloning
+                let key = std::mem::replace(&mut cells[1], String::new());
+                let value = std::mem::replace(&mut cells[2], String::new());
+                
+                self.set_from_string(key, value);
             }
         }
         
