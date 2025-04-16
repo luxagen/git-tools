@@ -2,34 +2,6 @@ use anyhow::{Result, anyhow};
 use gix_url::{Scheme, Url};
 use bstr::BStr;
 
-/// Normalize a path for use in URLs
-/// 
-/// This ensures special characters are properly encoded
-fn normalize_path(path: &str) -> String {
-    // Just unescape any backslash-escaped characters
-    unescape_backslashes(path)
-}
-
-/// Unescape backslash sequences in a string
-/// Simply removes backslashes, treating the character after each as a literal
-fn unescape_backslashes(s: &str) -> String {
-    let mut result = String::with_capacity(s.len());
-    let mut chars = s.chars().peekable();
-    
-    while let Some(c) = chars.next() {
-        if c == '\\' && chars.peek().is_some() {
-            // Skip the backslash and add whatever character follows it
-            if let Some(next_char) = chars.next() {
-                result.push(next_char);
-            }
-        } else {
-            result.push(c);
-        }
-    }
-    
-    result
-}
-
 /// Parse and normalize a Git remote URL
 /// 
 /// Handles three types of URLs:
@@ -71,61 +43,50 @@ pub fn parse_remote_url(url_str: &str) -> Result<String> {
 /// * `remote_dir` - Remote directory path
 /// * `repo_path` - Repository path
 pub fn build_remote_url(rlogin: &str, remote_dir: &str, repo_path: &str) -> String {
-    if !rlogin.is_empty() {
-        let login = rlogin.trim_end_matches('/');
-        
-        if login.contains("://") {
-            // Protocol-based URL (http://, https://, ssh://)
-            let login_parts: Vec<&str> = login.splitn(2, "://").collect();
-            let protocol = login_parts[0];
-            let domain = login_parts[1].trim_end_matches('/');
-            
-            // For HTTP/HTTPS, use URL encoding through gix-url
-            if protocol == "http" || protocol == "https" {
-                // Create a full URL with the path
-                let path = format!("{}/{}", 
-                    remote_dir.trim_matches('/'),
-                    repo_path.trim_start_matches('/'));
-                
-                let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
-                
-                // Try to parse and normalize with gix-url
-                if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
-                    return parsed.to_string();
-                }
-                
-                // Fall back to simple string formatting if parsing fails
-                return full_url;
-            } else if protocol == "ssh" {
-                // SSH protocol with explicit scheme
-                // For SSH, spaces should be preserved, not URL-encoded
-                let path = format!("{}/{}", 
-                    unescape_backslashes(remote_dir).trim_matches('/'),
-                    unescape_backslashes(repo_path).trim_start_matches('/'));
-                
-                return format!("{}://{}/{}", protocol, domain, path);
-            } else {
-                // Other protocols, handle generically
-                let path = format!("{}/{}", 
-                    unescape_backslashes(remote_dir).trim_matches('/'),
-                    unescape_backslashes(repo_path).trim_start_matches('/'));
-                
-                return format!("{}://{}/{}", protocol, domain, path);
-            }
-        } else {
-            // SSH SCP-style syntax (user@host:path)
-            // For SSH, spaces and special chars should be preserved, not URL-encoded
+    if rlogin.is_empty() {
+        // Local path - just join
+        return format!("{}/{}", 
+            remote_dir.trim_end_matches('/'),
+            repo_path.trim_start_matches('/'));
+    }
+    let login = rlogin.trim_end_matches('/');
+    if login.contains("://") {
+        // Protocol-based URL (http://, https://, ssh://)
+        let login_parts: Vec<&str> = login.splitn(2, "://").collect();
+        let protocol = login_parts[0];
+        let domain = login_parts[1].trim_end_matches('/');
+        // For HTTP/HTTPS, use URL encoding through gix-url
+        if protocol == "http" || protocol == "https" {
+            // Create a full URL with the path
             let path = format!("{}/{}", 
-                unescape_backslashes(remote_dir).trim_matches('/'),
-                unescape_backslashes(repo_path).trim_start_matches('/'));
-            
-            format!("{}:{}", login, path)
+                remote_dir.trim_matches('/'),
+                repo_path.trim_start_matches('/'));
+            let full_url = format!("{}://{}/{}", protocol, domain.trim_end_matches('/'), path);
+            // Try to parse and normalize with gix-url
+            if let Ok(parsed) = gix_url::parse(full_url.as_bytes().into()) {
+                return parsed.to_string();
+            }
+            // Fall back to simple string formatting if parsing fails
+            return full_url;
+        } else if protocol == "ssh" {
+            // SSH protocol with explicit scheme
+            let path = format!("{}/{}", 
+                remote_dir.trim_matches('/'),
+                repo_path.trim_start_matches('/'));
+            return format!("{}://{}/{}", protocol, domain, path);
+        } else {
+            // Other protocols, handle generically
+            let path = format!("{}/{}", 
+                remote_dir.trim_matches('/'),
+                repo_path.trim_start_matches('/'));
+            return format!("{}://{}/{}", protocol, domain, path);
         }
     } else {
-        // Local path - just unescape and join
-        format!("{}/{}", 
-            unescape_backslashes(remote_dir).trim_end_matches('/'),
-            unescape_backslashes(repo_path).trim_start_matches('/'))
+        // SSH SCP-style syntax (user@host:path)
+        let path = format!("{}/{}", 
+            remote_dir.trim_matches('/'),
+            repo_path.trim_start_matches('/'));
+        format!("{}:{}", login, path)
     }
 }
 
@@ -181,13 +142,5 @@ mod tests {
         assert_eq!(result, "https://github.com/organization/repository.git");
     }
 
-    #[test]
-    fn test_normalize_path_with_special_chars() {
-        assert_eq!(normalize_path("path/with spaces/[brackets]"), "path/with spaces/[brackets]");
-    }
 
-    #[test]
-    fn test_normalize_path_with_escaped_chars() {
-        assert_eq!(normalize_path("path/with\\[escaped\\]brackets"), "path/with[escaped]brackets");
-    }
 }

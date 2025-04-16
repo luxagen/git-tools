@@ -137,7 +137,7 @@ fn add_git_remote(local_path: &str, remote_url: &str) -> Result<()> {
 
 /// Create a new repository 
 pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> Result<()> {
-    let remote_rel_path_str = remote_rel_path.unwrap_or("");
+    let remote_rel_path_str = remote_rel_path;
     println!("Creating new repository at \"{}\" with remote \"{}\"", local_path, remote_rel_path_str);
     
     // Check required configuration
@@ -211,7 +211,7 @@ pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> R
     init_git_repository(local_path)?;
     
     // Use the helper function to generate the media path
-    let media_path = crate::get_media_repo_path(config, remote_rel_path.unwrap_or(""));
+    let media_path = crate::get_media_repo_path(config, remote_rel_path);
     
     // Configure the repository
     execute_config_cmd(local_path, &media_path, config)?;

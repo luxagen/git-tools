@@ -65,7 +65,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     
     // Different behavior based on mode flags
     if operations.list_rrel {
-        println!("{}", remote_rel_path.unwrap_or(""));
+        println!("{}", remote_rel_path);
         return Ok(());
     }
     
@@ -88,7 +88,7 @@ fn process_repo(config: &Config, local_path: &str, remote_rel_path: &str, media_
     // Helper to avoid duplicating unwrap_or for media path
     let configure_repo = |should_configure: bool| -> Result<()> {
         if should_configure {
-            repository::configure_repo(local_path, media_path.unwrap_or(""), config)?;
+            repository::configure_repo(local_path, media_path, config)?;
         }
         Ok(())
     };
