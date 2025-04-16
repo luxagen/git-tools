@@ -516,6 +516,11 @@ fn main() -> Result<()> {
     
     // Load configuration from environment variables
     config.load_from_env();
+
+    // Require LIST_FN (list_filename) to be set after config processing
+    if config.list_filename.is_empty() {
+        return Err(anyhow!("LIST_FN must be set in {}", config.list_filename));
+    }
     
     // Initialize operations
     initialize_operations(args.mode);
@@ -542,7 +547,7 @@ fn main() -> Result<()> {
             eprintln!("Error processing listfile: {}", err);
         }
     } else {
-        eprintln!("No .grm.repos file found");
+        eprintln!("No listfile found");
     }
     
     Ok(())
