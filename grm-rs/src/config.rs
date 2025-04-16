@@ -164,7 +164,13 @@ impl Config {
 
         // TODO sort out this tree
 
-        for mut cells in iter {
+        for line_result in iter {
+            // First handle any parsing errors
+            let mut cells = match line_result {
+                Ok(cells) => cells,
+                Err(err) => return Err(err.context("Error parsing configuration file"))
+            };
+            
             // Error if line contains more than 3 cells
             if cells.len() != 3 {
                 return Err(anyhow!("Config line has {} columns instead of the required 3", cells.len()));
@@ -251,25 +257,34 @@ impl ConfigLineIterator {
 }
 
 impl Iterator for ConfigLineIterator {
-    type Item = Vec<String>;
+    type Item = Result<Vec<String>>;
     
     fn next(&mut self) -> Option<Self::Item> {
+        // If we've reached the end of the content, stop iteration
         if self.position >= self.content.len() {
             return None;
         }
         
         let remainder = &self.content[self.position..];
-        let (cells, new_remainder) = parse_config_line(remainder);
+        let parse_result = parse_config_line(remainder);
         
-        // Update position for next iteration
-        self.position = self.content.len() - new_remainder.len();
-        
-        // Skip empty lines and comments (they return empty cell vectors)
-        if cells.is_empty() {
-            return self.next();
+        match parse_result {
+            Ok((cells, new_remainder)) => {
+                // Update position for next iteration
+                self.position = self.content.len() - new_remainder.len();
+                
+                // Skip empty lines and comments (they return empty cell vectors)
+                if cells.is_empty() {
+                    return self.next();
+                }
+                
+                Some(Ok(cells))
+            },
+            Err(err) => {
+                // Simply propagate the error directly
+                Some(Err(err))
+            }
         }
-        
-        Some(cells)
     }
 }
 
@@ -299,9 +314,14 @@ fn skip_whitespace(input: &str) -> &str {
 /// - Preserves escaped whitespace 
 /// - Stops at unescaped line endings (CR, LF) or separator characters
 /// - Trims trailing whitespace from the right
+/// - Treats a trailing backslash at end of line as an error
 ///
 /// If the cell cannot be parsed (empty input, immediate delimiter, etc.), 
 /// an empty string is returned.
+///
+/// # Error
+/// Returns an error when a trailing backslash is found at the end of the line 
+/// with no character to escape.
 ///
 /// Note: Escaped whitespace (e.g., `\ `) is preserved and never trimmed, only unescaped
 /// trailing whitespace is removed.
@@ -310,16 +330,16 @@ fn skip_whitespace(input: &str) -> &str {
 /// - `input`: The input string to parse
 ///
 /// # Returns
-/// A tuple containing:
-/// - The parsed cell as a String (may be empty)
-/// - The remaining unparsed portion of the input
-pub fn parse_config_cell(input: &str) -> (String, &str) {
+/// A Result containing:
+/// - On success: A tuple with the parsed cell and remaining input
+/// - On error: An anyhow error explaining the issue
+pub fn parse_config_cell(input: &str) -> Result<(String, &str)> {
     // Skip leading whitespace
     let input = skip_whitespace(input);
     
     // If we hit a newline, CR, separator, or empty string while skipping whitespace
     if input.is_empty() || input.starts_with('\n') || input.starts_with('\r') || input.starts_with(LIST_SEPARATOR) {
-        return (String::new(), input);
+        return Ok((String::new(), input));
     }
     
     // Start building the cell content
@@ -341,7 +361,12 @@ pub fn parse_config_cell(input: &str) -> (String, &str) {
         input = &input[c.len_utf8()..];
         
         // Handle escaping
-        if c == '\\' && !input.is_empty() {
+        if c == '\\' {
+            if input.is_empty() {
+                // Error: backslash at end of line with nothing to escape
+                return Err(anyhow!("Trailing backslash at end of line with nothing to escape"));
+            }
+            
             // Get the escaped character
             let escaped = input.chars().next().unwrap();
             
@@ -366,7 +391,7 @@ pub fn parse_config_cell(input: &str) -> (String, &str) {
     cell.truncate(rtrim_pos);
     
     // Return the cell directly, without additional scanning or copying
-    (cell, input)
+    Ok((cell, input))
 }
 
 /// Parse a line into a vector of cells and the remaining unparsed portion.
@@ -384,21 +409,21 @@ pub fn parse_config_cell(input: &str) -> (String, &str) {
 /// - `input`: The input string to parse
 ///
 /// # Returns
-/// A tuple containing:
-/// - Vector of parsed cells (may include empty strings)
-/// - The remaining unparsed portion of the input (after consuming line ending if present)
-pub fn parse_config_line(input: &str) -> (Vec<String>, &str) {
+/// A Result containing:
+/// - On success: A tuple with parsed cells and remaining input
+/// - On error: An error from cell parsing (like trailing backslash)
+pub fn parse_config_line(input: &str) -> Result<(Vec<String>, &str)> {
     // Skip empty lines
     if input.is_empty() {
-        return (Vec::new(), input);
+        return Ok((Vec::new(), input));
     }
     
     // Parse the first cell to check for comments (this will skip whitespace)
-    let (first_cell, first_remainder) = parse_config_cell(input);
+    let (first_cell, first_remainder) = parse_config_cell(input)?;
     
     // Check if it's a comment after skipping whitespace
     if first_cell.starts_with('#') {
-        return (Vec::new(), input);
+        return Ok((Vec::new(), input));
     }
     
     // Start building cells with the first cell we already parsed
@@ -417,7 +442,14 @@ pub fn parse_config_line(input: &str) -> (Vec<String>, &str) {
         // Skip past the separator and continue parsing
         remainder = &remainder[LIST_SEPARATOR.len_utf8()..];
         
-        let (cell, new_remainder) = parse_config_cell(remainder);
+        let parse_result = parse_config_cell(remainder);
+        
+        // Handle errors in cell parsing
+        if let Err(err) = parse_result {
+            return Err(err);
+        }
+        
+        let (cell, new_remainder) = parse_result?;
         
         // Check if this cell is a comment
         if cell.starts_with('#') {
@@ -453,7 +485,7 @@ pub fn parse_config_line(input: &str) -> (Vec<String>, &str) {
         _ => {} // No line ending but we're done parsing cells
     }
     
-    (cells, remainder)
+    Ok((cells, remainder))
 }
 
 /// Slice a string from the current position to the end of the line

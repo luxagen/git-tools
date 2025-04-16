@@ -207,7 +207,16 @@ fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
     let iter = ConfigLineIterator::from_file(list_path)?;
     
     // Process each parsed line
-    for cells in iter {
+    for line_result in iter {
+        // Handle parsing errors
+        let cells = match line_result {
+            Ok(cells) => cells,
+            Err(err) => {
+                eprintln!("Error parsing line: {}", err);
+                continue;
+            }
+        };
+        
         // Skip empty lines and comments (already handled by ConfigLineIterator)
         if cells.is_empty() {
             continue;
