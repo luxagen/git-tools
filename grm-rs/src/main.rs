@@ -260,8 +260,10 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     if cells[0].is_empty() {
         // This is a config line
         if cells.len() >= 3 {
+            let key = cells[1].clone();
+            let value = cells[2].clone();
             // Format: * KEY * VALUE
-            config.set_from_string(&cells[1], cells[2].clone());
+            config.set_from_string(&key, value);
         }
         return Ok(());
     }
