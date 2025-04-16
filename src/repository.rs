@@ -5,6 +5,14 @@ use anyhow::{Context, Result, anyhow};
 use crate::Config;
 use crate::process;
 
+// Shared repository specification struct
+#[derive(Debug, Clone)]
+pub struct RepoSpec<'a> {
+    pub remote_rel: &'a str,
+    pub local_rel: &'a str,
+    pub media_rel: &'a str,
+}
+
 /// Check if directory is a Git repository root
 pub fn is_dir_repo_root(local_path: &str) -> Result<bool> {
     // Use git rev-parse --git-dir which is more efficient for checking repository existence
@@ -94,8 +102,14 @@ pub fn clone_repo_no_checkout(local_path: &str, remote_url: &str) -> Result<()> 
 }
 
 /// Configure a repository using the provided command
+
 pub fn configure_repo(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
-    execute_config_cmd(local_path, media_path, config)
+    let repo = RepoSpec {
+        remote_rel: "", // Not used in config
+        local_rel: local_path,
+        media_rel: media_path,
+    };
+    execute_config_cmd(&repo, config)
 }
 
 /// Update the remote URL for a repository
@@ -214,7 +228,12 @@ pub fn create_new(local_path: &str, remote_rel_path: &str, config: &Config) -> R
     let media_path = crate::get_media_repo_path(config, remote_rel_path);
     
     // Configure the repository
-    execute_config_cmd(local_path, &media_path, config)?;
+    let repo = RepoSpec {
+        remote_rel: remote_rel_path,
+        local_rel: local_path,
+        media_rel: &media_path,
+    };
+    execute_config_cmd(&repo, config)?;
     
     // Git remote URL
     let git_remote = format!("{}{}", effective_login, grm_rpath);
@@ -265,13 +284,14 @@ fn detect_shell_command(cmd: &str) -> Result<ShellCommand> {
 }
 
 /// Execute a CONFIG_CMD in the specified directory
-fn execute_config_cmd(local_path: &str, media_path: &str, config: &Config) -> Result<()> {
+
+fn execute_config_cmd(repo: &RepoSpec, config: &Config) -> Result<()> {
     let config_cmd = &config.config_cmd;
     if config_cmd.is_empty() {
         return Ok(()); // No command to execute
     }
     // Append the media_path to the config command as a command-line argument
-    let full_command = format!("{} {}", config_cmd, media_path);
+    let full_command = format!("{} {}", config_cmd, repo.media_rel);
     
     // Try to detect the shell environment
     let shell_cmd = detect_shell_command(&full_command)?;
@@ -279,7 +299,7 @@ fn execute_config_cmd(local_path: &str, media_path: &str, config: &Config) -> Re
     // Execute through the detected shell
     let status = Command::new(shell_cmd.executable)
         .args(&shell_cmd.args)
-        .current_dir(local_path)
+        .current_dir(repo.local_rel)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
