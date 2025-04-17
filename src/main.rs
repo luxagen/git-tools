@@ -60,18 +60,16 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get operations
     let operations = get_operations();
     
-    // Handle list_rrel first since it needs the original repo.remote
     if operations.list_rrel {
-        println!("{}", repo.remote); // Use original repo.remote for relative path
+        println!("{}", repo.remote); // NEEDS RREL
         return Ok(());
     }
     
     if operations.list_lrel {
-        println!("{}", repo.local); // NEEDS NOTHING
+        println!("{}", repo.local);
         return Ok(());
     }
 
-    // Get local path info
     let path = Path::new(repo.local);
 
     let is_repo = match repository::is_dir_repo_root(repo.local) {
@@ -87,40 +85,59 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     if path.exists() {
         if path.is_dir() {
             if is_repo {
-                // output: exists
-
                 if operations.git {
-                    // Execute git commands in the repository
                     repository::run_git_command(repo.local, &config.git_args)?; // NEEDS NOTHING
-                }            
+                }
+
+                // continue: is a repo
             }
             else {
                 if operations.new {
-                    // Create new repo
-                    eprintln!("Creating new Git repository in {}", repo.local);
                     needs_checkout = repository::create_new(repo, config)?;  // NEEDS RREL
-                    
-                    eprintln!("{} created", repo.local);
+                    // continue: is a repo
+                }
+                else {
+                    // stop! not a repo
                 }
             }
         }
         else {
             // complain: not a dir
+            // stop! not a dir
         }
     }
     else {
         if operations.clone {
             repository::clone_repo_no_checkout(&repo)?; // NEEDS RURL
             needs_checkout = true;
+            // now exists and is a dir, so continue
         }
-
-        // complain?
+        else {
+            // stop! doesn't exist
+        }
     }
+
+    // WE SOMEHOW NEED TO RUN THIS IN LISTING MODE REGARDLESS
 
     if operations.list_rurl {
         println!("{}", repo.remote);  // NEEDS RURL
         return Ok(());
     }
+
+    if operations.configure {
+        repository::configure_repo(&repo, config)?; // NEEDS NOTHING
+    }
+
+    if operations.set_remote {
+        // fetch?
+        repository::set_remote(&repo)?; // NEEDS RURL
+    }
+
+    // Checkout master if needed (for new repositories)
+    if needs_checkout {
+        repository::check_out(repo.local)?; // NEEDS NOTHING
+    }
+
 
 //    if operations.new {
 //        if !path.exists() {
@@ -200,20 +217,6 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
 //    if !operations.new { // Don't print this for new repos (already did)
 //        eprintln!("{} exists", repo.local);
 //    }
-
-    // Configure first, then update remote
-    if operations.configure || needs_configure {
-        repository::configure_repo(&repo, config)?;
-    }
-
-    if operations.set_remote {
-        repository::set_remote(&repo)?;
-    }
-
-    // Checkout master if needed (for new repositories)
-    if needs_checkout {
-        repository::check_out(repo.local)?;
-    }
 
     return Ok(());
 }
