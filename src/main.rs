@@ -371,9 +371,9 @@ fn extract_repo_components(cells: &Vec<String>) -> (String, String, String) {
 /// Apply path transformations to raw repository paths based on configuration settings
 fn resolve_repo_paths(config: &Config, raw_spec: &OwnedRepoSpec) -> OwnedRepoSpec {
     // Apply appropriate prefixes to each path based on config settings
-    let remote_path = get_remote_repo_path(config, &raw_spec.remote);
-    let local_path = get_local_repo_path(config, &raw_spec.local);
-    let media_path = get_media_repo_path(config, &raw_spec.media);
+    let remote_path = cat_paths(&config.remote_dir, &raw_spec.remote);
+    let local_path = cat_paths(&config.local_dir, &raw_spec.local);
+    let media_path = cat_paths(&config.gm_dir, &raw_spec.media);
     
     // Return new spec with fully resolved paths
     OwnedRepoSpec {
@@ -383,68 +383,27 @@ fn resolve_repo_paths(config: &Config, raw_spec: &OwnedRepoSpec) -> OwnedRepoSpe
     }
 }
 
-// Duplicate function has been removed, using the previously defined get_remote_repo_path
-
-/// Generate a complete media repository path by combining gm_dir and repo_path
-pub fn get_media_repo_path(config: &Config, repo_path: &str) -> String {
+pub fn cat_paths(base: &str, rel: &str) -> String {
     // Absolute paths remain unchanged
-    if repo_path.starts_with('/') {
-        return repo_path.to_string();
+    if rel.starts_with('/') || base.is_empty() {
+        return rel.to_string();
     }
 
-    let gm_dir = &config.gm_dir;
-    if !gm_dir.is_empty() {
-        if !repo_path.is_empty() {
-            return format!("{}/{}", gm_dir, repo_path);
-        }
-        return gm_dir.to_string();
+    // Relative paths get base prefix if applicable
+    if !rel.is_empty() {
+        format!("{}/{}", base, rel)
+    } else {
+        base.to_string()
     }
-    repo_path.to_string()
 }
 
-/// Generate a complete local repository path by combining local_dir and repo_path
-pub fn get_local_repo_path(config: &Config, repo_path: &str) -> String {
-    // Absolute paths remain unchanged
-    if repo_path.starts_with('/') {
-        return repo_path.to_string();
-    }
-
-    // Relative paths get LOCAL_DIR prefix if applicable
-    let local_dir = &config.local_dir;
-    if !local_dir.is_empty() {
-        if !repo_path.is_empty() {
-            return format!("{}/{}", local_dir, repo_path);
-        }
-        return local_dir.to_string();
-    }
-    repo_path.to_string()
-}
-
-/// Generate a complete remote repository path by combining remote_dir and repo_path
-pub fn get_remote_repo_path(config: &Config, repo_path: &str) -> String {
-    // Absolute paths remain unchanged
-    if repo_path.starts_with('/') {
-        return repo_path.to_string();
-    }
-
-    // Relative paths get REMOTE_DIR prefix if applicable
-    if !config.remote_dir.is_empty() {
-        if !repo_path.is_empty() {
-            return format!("{}/{}", config.remote_dir, repo_path);
-        }
-        return config.remote_dir.to_string();
-    }
-    repo_path.to_string()
-}
-
-// ... (rest of the code remains the same)
 /// Get formatted remote URL based on configuration and remote relative path
 fn get_remote_url(config: &Config, remote_rel_path: &str) -> String {
     // Get the base path, defaulting to empty string if not set
     let base_path = &config.rpath_base;
     
-    // Use the remote repo path function to handle paths consistently
-    let full_repo_path = get_remote_repo_path(config, remote_rel_path);
+    // Use cat_paths to handle paths consistently
+    let full_repo_path = cat_paths(&config.remote_dir, remote_rel_path);
     
     // Choose URL format based on configuration
     if !config.rlogin.is_empty() {
