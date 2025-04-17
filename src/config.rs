@@ -246,14 +246,6 @@ impl ConfigLineIterator {
             position: 0,
         })
     }
-    
-    /// Create a new iterator from a string
-    pub fn from_string(content: String) -> Self {
-        Self {
-            content,
-            position: 0,
-        }
-    }
 }
 
 impl Iterator for ConfigLineIterator {
