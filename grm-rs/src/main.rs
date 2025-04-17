@@ -59,16 +59,19 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get operations
     let operations = get_operations();
     
+    // Handle list_rrel first since it needs the original repo.remote
+    if operations.list_rrel {
+        println!("{}", repo.remote); // Use original repo.remote for relative path
+        return Ok(());
+    }
+    
     // Get local path info
     let path = Path::new(repo.local);
-    // repo.local already contains the fully resolved path with all prefixes applied
-    
-    // Flag to determine if we need to checkout master at the end
+
     let mut needs_checkout = false;
-    
-    // Handle 'new' operation first - it's mutually exclusive with all others
+    let mut needs_configure = false;
+
     if operations.new {
-        // Check if path exists and is a directory
         if !path.exists() {
             eprintln!("ERROR: {} does not exist", repo.local);
             return Ok(());
@@ -95,19 +98,13 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         
         // Create new repo
         eprintln!("Creating new Git repository in {}", repo.local);
-        needs_checkout = repository::create_new(repo, config)?;
+        needs_configure = needs_checkout = repository::create_new(repo, config)?;
         
         // The operations.configure and operations.set_remote flags are already set
         // via the mode->operations translation in mode.rs for 'new' mode
         eprintln!("{} created", repo.local);
     }
-    
-    // Handle list_rrel first since it needs the original repo.remote
-    if operations.list_rrel {
-        println!("{}", repo.remote); // Use original repo.remote for relative path
-        return Ok(());
-    }
-    
+
     // For all other operations, use the remote URL instead of the relative path
     // Redefine repo to use the URL version for other operations
     let repo = RepoTriple {
@@ -115,25 +112,6 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         local: repo.local,
         media: repo.media,
     };
-
-    if operations.list_lrel {
-        println!("{}", repo.local);
-        return Ok(());
-    }
-
-    if operations.list_rurl {
-        println!("{}", repo.remote); // Use repo.remote which now contains the URL
-        return Ok(());
-    }
-    
-    // Skip processing for listing modes
-    if operations.is_listing_mode() {
-        return Ok(());
-    }
-    
-    let mut needs_configure = false;
-
-    // Why isn't this running for Moonlighting?!
 
     // Process based on path state
     if !path.exists() {
@@ -147,6 +125,16 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         repository::clone_repo_no_checkout(&repo)?;
         needs_configure = true;
         needs_checkout = true;
+    }
+
+    if operations.list_lrel {
+        println!("{}", repo.local);
+        return Ok(());
+    }
+
+    if operations.list_rurl {
+        println!("{}", repo.remote); // Use repo.remote which now contains the URL
+        return Ok(());
     }
     
     // Check if path is a directory
