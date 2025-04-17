@@ -114,7 +114,7 @@ pub fn check_out(local_path: &str) -> Result<()> {
     println!("Checking out repository at \"{}\"", local_path);
     
     // Reset to get the working directory in sync with remote
-    run_git_command_with_warning(local_path, &["reset", "--hard"], "reset")?;
+    run_git_command_with_warning(local_path, &["checkout"], "checkout")?;
     
     Ok(())
 }
