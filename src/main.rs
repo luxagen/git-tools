@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 use std::env;
+use std::f32::consts::E;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -65,45 +66,92 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         return Ok(());
     }
     
+    if operations.list_lrel {
+        println!("{}", repo.local); // NEEDS NOTHING
+        return Ok(());
+    }
+
     // Get local path info
     let path = Path::new(repo.local);
 
-    let mut needs_checkout = false;
-    let mut needs_configure = false;
+    let is_repo = match repository::is_dir_repo_root(repo.local) {
+        Ok(result) => result,
+        Err(err) => {
+            eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
+            return Ok(());
+        }
+    };
 
-    if operations.new {
-        if !path.exists() {
-            eprintln!("ERROR: {} does not exist", repo.local);
-            return Ok(());
-        }
-        
-        if !path.is_dir() {
-            eprintln!("ERROR: {} is not a directory", repo.local);
-            return Ok(());
-        }
-        
-        // Check if it's already a repository
-        let is_repo = match repository::is_dir_repo_root(repo.local) {
-            Ok(result) => result,
-            Err(err) => {
-                eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
-                return Ok(());
+    let mut needs_checkout = false;
+
+    if path.exists() {
+        if path.is_dir() {
+            if is_repo {
+                // output: exists
+
+                if operations.git {
+                    // Execute git commands in the repository
+                    repository::run_git_command(repo.local, &config.git_args)?; // NEEDS NOTHING
+                }            
             }
-        };
-        
-        if is_repo {
-            eprintln!("{} already exists (skipping)", repo.local);
-            return Ok(());
+            else {
+                if operations.new {
+                    // Create new repo
+                    eprintln!("Creating new Git repository in {}", repo.local);
+                    needs_checkout = repository::create_new(repo, config)?;  // NEEDS RREL
+                    
+                    eprintln!("{} created", repo.local);
+                }
+            }
         }
-        
-        // Create new repo
-        eprintln!("Creating new Git repository in {}", repo.local);
-        needs_configure = needs_checkout = repository::create_new(repo, config)?;
-        
-        // The operations.configure and operations.set_remote flags are already set
-        // via the mode->operations translation in mode.rs for 'new' mode
-        eprintln!("{} created", repo.local);
+        else {
+            // complain: not a dir
+        }
     }
+    else {
+        if operations.clone {
+            repository::clone_repo_no_checkout(&repo)?; // NEEDS RURL
+            needs_checkout = true;
+        }
+
+        // complain?
+    }
+
+    if operations.list_rurl {
+        println!("{}", repo.remote);  // NEEDS RURL
+        return Ok(());
+    }
+
+//    if operations.new {
+//        if !path.exists() {
+//            eprintln!("ERROR: {} does not exist", repo.local);
+//            return Ok(());
+//        }
+//        
+//        if !path.is_dir() {
+//            eprintln!("ERROR: {} is not a directory", repo.local);
+//            return Ok(());
+//        }
+//
+//        let is_repo = match repository::is_dir_repo_root(repo.local) {
+//            Ok(result) => result,
+//            Err(err) => {
+//                eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
+//                return Ok(());
+//            }
+//        };
+//        
+//        if is_repo {
+//            eprintln!("{} already exists (skipping)", repo.local);
+//            return Ok(());
+//        }
+//        
+//        // Create new repo
+//        eprintln!("Creating new Git repository in {}", repo.local);
+//        needs_checkout = repository::create_new(repo, config)?;
+//        
+//        eprintln!("{} created", repo.local);
+//    }
 
     // For all other operations, use the remote URL instead of the relative path
     // Redefine repo to use the URL version for other operations
@@ -113,55 +161,45 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         media: repo.media,
     };
 
-    // Process based on path state
-    if !path.exists() {
-        // Only clone if clone operation is enabled
-        if !operations.clone {
-            eprintln!("ERROR: {} does not exist", repo.local);
-            return Ok(());
-        }
+//    // Process based on path state
+//    if !path.exists() {
+//        // Only clone if clone operation is enabled
+//        if !operations.clone {
+//            eprintln!("ERROR: {} does not exist", repo.local);
+//            return Ok(());
+//        }
+//
+//        // Clone, configure, and checkout
+//        repository::clone_repo_no_checkout(&repo)?;
+//        needs_configure = true;
+//        needs_checkout = true;
+//    }
 
-        // Clone, configure, and checkout
-        repository::clone_repo_no_checkout(&repo)?;
-        needs_configure = true;
-        needs_checkout = true;
-    }
-
-    if operations.list_lrel {
-        println!("{}", repo.local);
-        return Ok(());
-    }
-
-    if operations.list_rurl {
-        println!("{}", repo.remote); // Use repo.remote which now contains the URL
-        return Ok(());
-    }
-    
-    // Check if path is a directory
-    if !path.is_dir() {
-        eprintln!("ERROR: {} is not a directory", repo.local);
-        return Ok(());
-    }
+//    // Check if path is a directory
+//    if !path.is_dir() {
+//        eprintln!("ERROR: {} is not a directory", repo.local);
+//        return Ok(());
+//    }
     
     // Check if directory is a git repository
-    let is_repo = match repository::is_dir_repo_root(repo.local) {
-        Ok(result) => result,
-        Err(err) => {
-            eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
-            return Ok(());
-        }
-    };
+//    let is_repo = match repository::is_dir_repo_root(repo.local) {
+//        Ok(result) => result,
+//        Err(err) => {
+//            eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
+//            return Ok(());
+//        }
+//    };
 
-    if !is_repo {
-        // If we get here, the directory exists but isn't a git repository
-        eprintln!("ERROR: {} is not a Git repository", repo.local);
-        return Ok(());
-    }
+//    if !is_repo {
+//        // If we get here, the directory exists but isn't a git repository
+//        eprintln!("ERROR: {} is not a Git repository", repo.local);
+//        return Ok(());
+//    }
 
     // Get remote URL
-    if !operations.new { // Don't print this for new repos (already did)
-        eprintln!("{} exists", repo.local);
-    }
+//    if !operations.new { // Don't print this for new repos (already did)
+//        eprintln!("{} exists", repo.local);
+//    }
 
     // Configure first, then update remote
     if operations.configure || needs_configure {
@@ -175,13 +213,6 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Checkout master if needed (for new repositories)
     if needs_checkout {
         repository::check_out(repo.local)?;
-    }
-
-    if operations.git {
-        // Execute git commands in the repository
-        if !config.git_args.is_empty() {
-            repository::run_git_command(repo.local, &config.git_args)?;
-        }
     }
 
     return Ok(());
