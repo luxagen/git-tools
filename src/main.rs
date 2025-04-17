@@ -134,7 +134,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     }
     
     // No longer need the configure_repo helper as we'll use direct conditional checks
-    
+
+    let mut needs_configure = false;
+
     // Process based on path state
     if !path.exists() {
         // Only clone if clone operation is enabled
@@ -142,13 +144,11 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
             eprintln!("ERROR: {} does not exist", prefixed_local_path);
             return Ok(());
         }
-        
+
         // Clone, configure, and checkout
         repository::clone_repo_no_checkout(&repo)?;
-        repository::configure_repo(&repo, config)?; // Always configure after clone
-        repository::check_out(repo.local)?;
-        
-        return Ok(());
+        needs_configure = true;
+        needs_checkout = true;
     }
     
     // Check if path is a directory
@@ -178,7 +178,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     }
 
     // Configure first, then update remote
-    if operations.configure {
+    if operations.configure || needs_configure {
         repository::configure_repo(&repo, config)?;
     }
 
