@@ -17,7 +17,7 @@ mod mode;
 mod config;
 mod remote_url;
 
-use mode::{PrimaryMode, initialize_operations, get_operations};
+use mode::{PrimaryMode, initialize_operations, get_operations, get_mode_string};
 use config::{Config, ConfigLineIterator};
 
 /// Separator character used in listfiles
@@ -232,26 +232,12 @@ fn process_listfile(config: &mut Config, list_path: &Path) -> Result<()> {
     let operations = get_operations();
     if operations.recurse {
         let parent_dir = list_path.parent().unwrap_or(Path::new("."));
-        if let Err(err) = recursive::recurse_listfiles(parent_dir, config, &get_mode_string()) {
+        if let Err(err) = recursive::recurse_listfiles(parent_dir, config, mode::get_mode_string()) {
             eprintln!("Error during recursion: {}", err);
         }
     }
     
     Ok(())
-}
-
-/// Get the current mode string
-fn get_mode_string() -> String {
-    let operations = get_operations();
-    if operations.list_lrel { return "list-lrel".to_string(); }
-    if operations.list_rrel { return "list-rrel".to_string(); }
-    if operations.list_rurl { return "list-rurl".to_string(); }
-    if operations.clone { return "clone".to_string(); }
-    if operations.configure { return "configure".to_string(); }
-    if operations.set_remote { return "set-remote".to_string(); }
-    if operations.git { return "git".to_string(); }
-    if operations.new { return "new".to_string(); }
-    "status".to_string() // default
 }
 
 /// Process cells from a repository list file
