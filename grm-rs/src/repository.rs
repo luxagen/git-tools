@@ -72,11 +72,6 @@ fn run_git_command_with_warning(local_path: &str, args: &[&str], operation: &str
     Ok(())
 }
 
-/// Helper for fetching from a remote
-fn git_fetch(local_path: &str, remote: &str) -> Result<()> {
-    run_git_command_with_warning(local_path, &["fetch", remote], "fetch")
-}
-
 /// Clone a repository without checking it out
 pub fn clone_repo_no_checkout(repo: &RepoTriple) -> Result<()> {
     println!("Cloning repository \"{}\" into \"{}\"", repo.remote, repo.local);
@@ -121,13 +116,6 @@ pub fn check_out(local_path: &str) -> Result<()> {
     // Reset to get the working directory in sync with remote
     run_git_command_with_warning(local_path, &["reset", "--hard"], "reset")?;
     
-    Ok(())
-}
-
-/// Add a git remote - used for new repositories
-pub fn add_git_remote(repo: &RepoTriple) -> Result<()> {
-    println!("Adding remote origin");
-    run_git_cmd_internal(repo.local, &["remote", "add", "-f", "origin", repo.remote])?;
     Ok(())
 }
 

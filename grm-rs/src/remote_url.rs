@@ -2,41 +2,6 @@ use anyhow::{Result, anyhow};
 use gix_url::{Scheme, Url};
 use bstr::BStr;
 
-/// Parse and normalize a Git remote URL
-/// 
-/// Handles three types of URLs:
-/// - Local paths
-/// - HTTP(S) URLs
-/// - SSH URLs
-/// 
-/// Returns the normalized URL that can be used with Git operations
-pub fn parse_remote_url(url_str: &str) -> Result<String> {
-    // Parse the URL using gix-url - convert str to BStr
-    let parsed = gix_url::parse(url_str.as_bytes().into())
-        .map_err(|e| anyhow!("Failed to parse remote URL: {}", e))?;
-
-    // Return different formats based on the scheme
-    match parsed.scheme {
-        Scheme::File => {
-            // Local file path
-            Ok(parsed.path.to_string())
-        },
-        Scheme::Https | Scheme::Http => {
-            // HTTP(S) URL - return as is but normalized
-            Ok(parsed.to_string())
-        },
-        Scheme::Ssh => {
-            // SSH URL - properly format as user@host:path
-            // Use the to_string() method which handles the proper formatting
-            Ok(parsed.to_string())
-        },
-        _ => {
-            // Other schemes - return as is
-            Ok(parsed.to_string())
-        }
-    }
-}
-
 /// Build a Git clone/fetch URL from components
 /// 
 /// * `rlogin` - Optional remote login info (e.g., "user@host" or "https://github.com")
@@ -77,24 +42,6 @@ pub fn build_remote_url(rlogin: &str, remote_dir: &str, repo_path: &str) -> Stri
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_parse_local_path() {
-        let result = parse_remote_url("/path/to/repo.git").unwrap();
-        assert_eq!(result, "/path/to/repo.git");
-    }
-
-    #[test]
-    fn test_parse_https_url() {
-        let result = parse_remote_url("https://github.com/user/repo.git").unwrap();
-        assert_eq!(result, "https://github.com/user/repo.git");
-    }
-
-    #[test]
-    fn test_parse_ssh_url() {
-        let result = parse_remote_url("ssh://user@github.com/user/repo.git").unwrap();
-        assert_eq!(result, "ssh://user@github.com/user/repo.git");
-    }
 
     #[test]
     fn test_build_remote_url_with_login() {
