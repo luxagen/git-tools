@@ -387,6 +387,11 @@ fn resolve_repo_paths(config: &Config, raw_spec: &OwnedRepoSpec) -> OwnedRepoSpe
 
 /// Generate a complete media repository path by combining gm_dir and repo_path
 pub fn get_media_repo_path(config: &Config, repo_path: &str) -> String {
+    // Absolute paths remain unchanged
+    if repo_path.starts_with('/') {
+        return repo_path.to_string();
+    }
+
     let gm_dir = &config.gm_dir;
     if !gm_dir.is_empty() {
         if !repo_path.is_empty() {
@@ -403,7 +408,7 @@ pub fn get_local_repo_path(config: &Config, repo_path: &str) -> String {
     if repo_path.starts_with('/') {
         return repo_path.to_string();
     }
-    
+
     // Relative paths get LOCAL_DIR prefix if applicable
     let local_dir = &config.local_dir;
     if !local_dir.is_empty() {
@@ -421,7 +426,7 @@ pub fn get_remote_repo_path(config: &Config, repo_path: &str) -> String {
     if repo_path.starts_with('/') {
         return repo_path.to_string();
     }
-    
+
     // Relative paths get REMOTE_DIR prefix if applicable
     if !config.remote_dir.is_empty() {
         if !repo_path.is_empty() {
