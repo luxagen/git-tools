@@ -165,39 +165,39 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
             return Ok(());
         }
     };
-    
-    if is_repo {
-        // Get remote URL
-        if !operations.new { // Don't print this for new repos (already did)
-            eprintln!("{} exists", prefixed_local_path);
-        }
-        
-        // Configure first, then update remote
-        if operations.configure {
-            repository::configure_repo(&repo, config)?;
-        }
-        
-        if operations.set_remote {
-            repository::set_remote(&repo)?;
-        }
-        
-        if operations.git {
-            // Execute git commands in the repository
-            if !config.git_args.is_empty() {
-                repository::run_git_command(repo.local, &config.git_args)?;
-            }
-        }
-        
-        // Checkout master if needed (for new repositories)
-        if needs_checkout {
-            repository::run_git_command(repo.local, "checkout master")?;
-        }
-        
+
+    if !is_repo {
+        // If we get here, the directory exists but isn't a git repository
+        eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
         return Ok(());
     }
-    
-    // If we get here, the directory exists but isn't a git repository
-    eprintln!("ERROR: {} is not a Git repository", prefixed_local_path);
+
+    // Get remote URL
+    if !operations.new { // Don't print this for new repos (already did)
+        eprintln!("{} exists", prefixed_local_path);
+    }
+
+    // Configure first, then update remote
+    if operations.configure {
+        repository::configure_repo(&repo, config)?;
+    }
+
+    if operations.set_remote {
+        repository::set_remote(&repo)?;
+    }
+
+    // Checkout master if needed (for new repositories)
+    if needs_checkout {
+        repository::check_out(repo.local)?;
+    }
+
+    if operations.git {
+        // Execute git commands in the repository
+        if !config.git_args.is_empty() {
+            repository::run_git_command(repo.local, &config.git_args)?;
+        }
+    }
+
     return Ok(());
 }
 
