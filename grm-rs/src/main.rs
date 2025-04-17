@@ -59,6 +59,8 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
 fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get operations
     let operations = get_operations();
+
+    let remote_url = get_remote_url(config, repo.remote);
     
     if operations.list_rrel {
         println!("{}", repo.remote); // NEEDS RREL
