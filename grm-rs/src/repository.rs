@@ -140,7 +140,7 @@ pub fn check_out(local_path: &str) -> Result<()> {
 pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<bool> {
     println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_path, repo.remote_url);
     let local_path = repo.local_path;
-    let remote_rel_path = repo.remote_path;
+    let remote_path = repo.remote_path;
     
     // Check required configuration
     let rpath_template = if config.rpath_template.is_empty() {
@@ -155,12 +155,6 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
         &config.rlogin
     };
 
-    let rpath_base = if config.rpath_base.is_empty() {
-        return Err(anyhow!("RPATH_BASE not set in configuration"));
-    } else {
-        &config.rpath_base
-    };
-
     // Parse SSH host
     let ssh_host = if rlogin.is_empty() {
         "localhost"
@@ -171,13 +165,10 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
     };
 
     // Construct remote path with .git extension
-    let mut grm_rpath = format!("{}/{}", rpath_base, remote_rel_path);
-    if !grm_rpath.ends_with(".git") {
-        grm_rpath.push_str(".git");
-    }
+    let target_path = if !remote_path.ends_with(".git") {format!("{}.git", remote_path)} else {remote_path.to_string()};
 
     // Prompt for confirmation
-    print!("About to create remote repo '{}'; are you sure? (y/n) ", grm_rpath);
+    print!("About to create remote repo '{}'; are you sure? (y/n) ", target_path);
     std::io::stdout().flush()?;
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
@@ -188,7 +179,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
     }
 
     // Create remote repo based on template
-    let ssh_cmd = format!("xargs -0 -n 1 -- cp -na --reflink=auto '{}/{}'", rpath_base, rpath_template);
+    let ssh_cmd = format!("xargs -0 -n 1 -- cp -na --reflink=auto");
 
     let mut child = Command::new("ssh")
         .args([ssh_host, &ssh_cmd])
@@ -198,7 +189,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
 
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
-        stdin.write_all(format!("{}\0", grm_rpath).as_bytes())?;
+        stdin.write_all(format!("{}\0{}\0", rpath_template, target_path).as_bytes())?;
     }
 
     let status = child.wait()?;
