@@ -60,24 +60,24 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get operations
     let operations = get_operations();
 
-    let remote_url = get_remote_url(config, repo.remote);
+    let remote_url = get_remote_url(config, repo.remote_path);
     
     if operations.list_rrel {
-        println!("{}", repo.remote); // NEEDS RREL
+        println!("{}", repo.remote_path); // NEEDS RREL
         return Ok(());
     }
     
     if operations.list_lrel {
-        println!("{}", repo.local);
+        println!("{}", repo.local_path);
         return Ok(());
     }
 
-    let path = Path::new(repo.local);
+    let path = Path::new(repo.local_path);
 
-    let is_repo = match repository::is_dir_repo_root(repo.local) {
+    let is_repo = match repository::is_dir_repo_root(repo.local_path) {
         Ok(result) => result,
         Err(err) => {
-            eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
+            eprintln!("Error checking if {} is a Git repository: {}", repo.local_path, err);
             return Ok(());
         }
     };
@@ -88,7 +88,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         if path.is_dir() {
             if is_repo {
                 if operations.git {
-                    repository::run_git_command(repo.local, &config.git_args)?; // NEEDS NOTHING
+                    repository::run_git_command(repo.local_path, &config.git_args)?; // NEEDS NOTHING
                 }
 
                 // continue: is a repo
@@ -122,7 +122,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // WE SOMEHOW NEED TO RUN THIS IN LISTING MODE REGARDLESS
 
     if operations.list_rurl {
-        println!("{}", repo.remote);  // NEEDS RURL
+        println!("{}", repo.remote_path);  // NEEDS RURL
         return Ok(());
     }
 
@@ -137,7 +137,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
 
     // Checkout master if needed (for new repositories)
     if needs_checkout {
-        repository::check_out(repo.local)?; // NEEDS NOTHING
+        repository::check_out(repo.local_path)?; // NEEDS NOTHING
     }
 
 
@@ -175,9 +175,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // For all other operations, use the remote URL instead of the relative path
     // Redefine repo to use the URL version for other operations
     let repo = RepoTriple {
-        remote: &get_remote_url(config, repo.remote),
-        local: repo.local,
-        media: repo.media,
+        remote_path: &get_remote_url(config, repo.remote_path),
+        local_path: repo.local_path,
+        media_path: repo.media_path,
     };
 
 //    // Process based on path state
@@ -307,23 +307,23 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
     // Create a repo triple that borrows from our resolved spec
     // This is safe because resolved_spec lives for the rest of this function
     let repo_spec = RepoTriple {
-        remote: &resolved_spec.remote,
-        local: &resolved_spec.local,
-        media: &resolved_spec.media,
+        remote_path: &resolved_spec.remote,
+        local_path: &resolved_spec.local,
+        media_path: &resolved_spec.media,
     };
     
     // Filter out repositories that are not in or below the current directory
-    if !passes_tree_filter(&config.tree_filter, repo_spec.local) {
+    if !passes_tree_filter(&config.tree_filter, repo_spec.local_path) {
         return Ok(());
     }
     
     if get_operations().debug {
-        eprintln!("Potential target: {}", repo_spec.local);
+        eprintln!("Potential target: {}", repo_spec.local_path);
     }
     
     // Process the repository
     if let Err(err) = process_repo(config, &repo_spec) {
-        eprintln!("Error processing {}: {}", repo_spec.local, err);
+        eprintln!("Error processing {}: {}", repo_spec.local_path, err);
     }
     
     Ok(())

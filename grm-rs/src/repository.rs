@@ -8,9 +8,9 @@ use crate::process;
 // Shared repository specification struct
 #[derive(Debug, Clone)]
 pub struct RepoTriple<'a> {
-    pub remote: &'a str,
-    pub local: &'a str,
-    pub media: &'a str,
+    pub remote_path: &'a str,
+    pub local_path: &'a str,
+    pub media_path: &'a str, // TODO REMOVE
 }
 
 /// Check if directory is a Git repository root
@@ -74,17 +74,17 @@ fn run_git_command_with_warning(local_path: &str, args: &[&str], operation: &str
 
 /// Clone a repository without checking it out
 pub fn clone_repo_no_checkout(repo: &RepoTriple) -> Result<()> {
-    println!("Cloning repository \"{}\" into \"{}\"", repo.remote, repo.local);
+    println!("Cloning repository \"{}\" into \"{}\"", repo.remote_path, repo.local_path);
     let status = Command::new("git")
         .arg("clone")
         .arg("--no-checkout")
-        .arg(repo.remote)
-        .arg(Path::new(repo.local))
+        .arg(repo.remote_path)
+        .arg(Path::new(repo.local_path))
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit()) 
         .stderr(std::process::Stdio::inherit())
         .status()
-        .with_context(|| format!("Failed to execute clone: {}", repo.remote))?;
+        .with_context(|| format!("Failed to execute clone: {}", repo.remote_path))?;
     if !status.success() {
         return Err(anyhow!("Git clone failed with exit code: {:?}", status));
     }
@@ -99,10 +99,10 @@ pub fn configure_repo(repo: &RepoTriple, config: &Config) -> Result<()> {
 
 /// Update the remote URL for a repository
 pub fn set_remote(repo: &RepoTriple) -> Result<()> {
-    let status = process::run_command_silent(repo.local, &["git", "remote", "set-url", "origin", repo.remote])?;
+    let status = process::run_command_silent(repo.local_path, &["git", "remote", "set-url", "origin", repo.remote_path])?;
     if status == 2 {
         println!("Adding remote origin");
-        run_git_cmd_internal(repo.local, &["remote", "add", "-f", "origin", repo.remote])?;
+        run_git_cmd_internal(repo.local_path, &["remote", "add", "-f", "origin", repo.remote_path])?;
     } else if status != 0 {
         return Err(anyhow!("Failed to set remote with exit code: {}", status));
     }
@@ -122,9 +122,9 @@ pub fn check_out(local_path: &str) -> Result<()> {
 /// Create a new repository
 /// Returns true if this was a virgin (newly initialized) repository that needs a checkout after the remote is added
 pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<bool> {
-    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local, repo.remote);
-    let local_path = repo.local;
-    let remote_rel_path = repo.remote;
+    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_path, repo.remote_path);
+    let local_path = repo.local_path;
+    let remote_rel_path = repo.remote_path;
     
     // Check required configuration
     let rpath_template = if config.rpath_template.is_empty() {
@@ -240,7 +240,7 @@ pub fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
         return Ok(()); // No command to execute
     }
     // Append the media_path to the config command as a command-line argument
-    let full_command = format!("{} {}", config_cmd, repo.media);
+    let full_command = format!("{} {}", config_cmd, repo.media_path);
     
     // Try to detect the shell environment
     let shell_cmd = detect_shell_command(&full_command)?;
@@ -248,7 +248,7 @@ pub fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
     // Execute through the detected shell
     let status = Command::new(shell_cmd.executable)
         .args(&shell_cmd.args)
-        .current_dir(repo.local)
+        .current_dir(repo.local_path)
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit())
         .stderr(std::process::Stdio::inherit())
