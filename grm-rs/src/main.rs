@@ -62,7 +62,9 @@ enum RepoState {
     Repo,
 }
 
-fn determine_repo_state(path: &Path) -> Result<RepoState> {
+fn determine_repo_state(path: &str) -> Result<RepoState> {
+    let path = Path::new(path);
+
     if !path.exists() {
         return Ok(RepoState::Missing);
     }
@@ -92,9 +94,12 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
         return Ok(());
     }
 
-    let path = Path::new(repo.local_path);
+    if operations.list_rurl {
+        println!("{}", repo.remote_url);
+        return Ok(());
+    }
 
-    let mut state = determine_repo_state(path)?;
+    let mut state = determine_repo_state(&repo.local_path)?;
 
     let mut needs_checkout = false;
 
@@ -108,7 +113,7 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
                     return Ok(()); // Terminal
                 }
 
-                repository::clone_repo_no_checkout(&repo)?; // NEEDS RURL
+                repository::clone_repo_no_checkout(&repo)?;
                 needs_checkout = true;
                 RepoState::Repo // New state
             }
@@ -117,39 +122,33 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
                     return Ok(()); // Terminal
                 }
 
-                needs_checkout = repository::create_new(&repo, config, false)?;  // NEEDS RREL
+                needs_checkout = repository::create_new(&repo, config, false)?;
                 RepoState::Repo // New state
             }
             RepoState::Repo => {
                 if !operations.new {
-                    needs_checkout = repository::create_new(&repo, config, false)?;  // NEEDS RREL
+                    needs_checkout = repository::create_new(&repo, config, false)?;
                 }
 
                 RepoState::Repo // Unchanged
             }
         };
 
-        if operations.list_rurl {
-            println!("{}", repo.remote_path);  // NEEDS RURL
-            return Ok(());
-        }
-
         if operations.git {
             repository::run_git_command(repo.local_path, &config.git_args)?;
         }
 
         if operations.configure {
-            repository::configure_repo(&repo, config)?; // NEEDS NOTHING
+            repository::configure_repo(&repo, config)?;
         }
     
         if operations.set_remote {
             // fetch?
-            repository::set_remote(&repo)?; // NEEDS RURL
+            repository::set_remote(&repo)?;
         }
     
-        // Checkout master if needed (for new repositories)
         if needs_checkout {
-            repository::check_out(repo.local_path)?; // NEEDS NOTHING
+            repository::check_out(repo.local_path)?;
         }
 
         return Ok(()); // Job done

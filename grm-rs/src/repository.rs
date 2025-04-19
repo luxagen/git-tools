@@ -139,8 +139,6 @@ pub fn check_out(local_path: &str) -> Result<()> {
 /// Returns true if this was a virgin (newly initialized) repository that needs a checkout after the remote is added
 pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<bool> {
     println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_path, repo.remote_url);
-    let local_path = repo.local_path;
-    let remote_path = repo.remote_path;
     
     // Check required configuration
     let rpath_template = if config.rpath_template.is_empty() {
@@ -165,7 +163,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
     };
 
     // Construct remote path with .git extension
-    let target_path = if !remote_path.ends_with(".git") {format!("{}.git", remote_path)} else {remote_path.to_string()};
+    let target_path = if !repo.remote_path.ends_with(".git") {format!("{}.git", repo.remote_path)} else {repo.remote_path.to_string()};
 
     // Prompt for confirmation
     print!("About to create remote repo '{}'; are you sure? (y/n) ", target_path);
@@ -198,7 +196,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
     }
 
     // Initialize git repository
-    init_git_repository(local_path)?;
+    init_git_repository(repo.local_path)?;
 
     println!("Repository created successfully");
     Ok(!is_repo)
@@ -243,6 +241,7 @@ pub fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
     if config_cmd.is_empty() {
         return Ok(()); // No command to execute
     }
+
     // Append the media_path to the config command as a command-line argument
     let full_command = format!("{} {}", config_cmd, repo.media_path);
     
