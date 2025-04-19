@@ -242,8 +242,10 @@ pub fn execute_config_cmd(repo: &RepoTriple, config: &Config) -> Result<()> {
         return Ok(()); // No command to execute
     }
 
-    // Append the media_path to the config command as a command-line argument
-    let full_command = format!("{} {}", config_cmd, repo.media_path);
+    // Use shell-escape crate to robustly escape the media_path argument for shell usage
+    use shell_escape::unix::escape;
+    let escaped_media_path = escape(repo.media_path.into());
+    let full_command = format!("{} {}", config_cmd, escaped_media_path);
     
     // Try to detect the shell environment
     let shell_cmd = detect_shell_command(&full_command)?;
