@@ -121,7 +121,10 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
                 RepoState::Repo // New state
             }
             RepoState::Repo => {
-                // NOTE: WE MUST SUPPORT NEW MODE HERE!!!
+                if !operations.new {
+                    needs_checkout = repository::create_new(&repo, config, false)?;  // NEEDS RREL
+                }
+
                 RepoState::Repo // Unchanged
             }
         };
