@@ -9,9 +9,25 @@ use crate::process;
 #[derive(Debug, Clone)]
 pub struct RepoTriple<'a> {
     pub remote_path: &'a str,
+    pub remote_url: &'a str,
     pub local_path: &'a str,
     pub media_path: &'a str, // TODO REMOVE
 }
+
+impl<'a> RepoTriple<'a> {
+    /// Create a new RepoTriple with remote_path, local_path, and media_path; remote_url is initialized to empty
+    pub fn new(remote_path: &'a str, local_path: &'a str, media_path: &'a str, remote_url: &'a str) -> Self {
+        use crate::get_remote_url;
+
+        Self {
+            remote_path,
+            remote_url,
+            local_path,
+            media_path,
+        }
+    }
+}
+
 
 /// Check if directory is a Git repository root
 pub fn is_dir_repo_root(local_path: &str) -> Result<bool> {
@@ -74,17 +90,17 @@ fn run_git_command_with_warning(local_path: &str, args: &[&str], operation: &str
 
 /// Clone a repository without checking it out
 pub fn clone_repo_no_checkout(repo: &RepoTriple) -> Result<()> {
-    println!("Cloning repository \"{}\" into \"{}\"", repo.remote_path, repo.local_path);
+    println!("Cloning repository \"{}\" into \"{}\"", repo.remote_url, repo.local_path);
     let status = Command::new("git")
         .arg("clone")
         .arg("--no-checkout")
-        .arg(repo.remote_path)
+        .arg(repo.remote_url)
         .arg(Path::new(repo.local_path))
         .stdin(std::process::Stdio::inherit())
         .stdout(std::process::Stdio::inherit()) 
         .stderr(std::process::Stdio::inherit())
         .status()
-        .with_context(|| format!("Failed to execute clone: {}", repo.remote_path))?;
+        .with_context(|| format!("Failed to execute clone: {}", repo.remote_url))?;
     if !status.success() {
         return Err(anyhow!("Git clone failed with exit code: {:?}", status));
     }
@@ -99,10 +115,10 @@ pub fn configure_repo(repo: &RepoTriple, config: &Config) -> Result<()> {
 
 /// Update the remote URL for a repository
 pub fn set_remote(repo: &RepoTriple) -> Result<()> {
-    let status = process::run_command_silent(repo.local_path, &["git", "remote", "set-url", "origin", repo.remote_path])?;
+    let status = process::run_command_silent(repo.local_path, &["git", "remote", "set-url", "origin", repo.remote_url])?;
     if status == 2 {
         println!("Adding remote origin");
-        run_git_cmd_internal(repo.local_path, &["remote", "add", "-f", "origin", repo.remote_path])?;
+        run_git_cmd_internal(repo.local_path, &["remote", "add", "-f", "origin", repo.remote_url])?;
     } else if status != 0 {
         return Err(anyhow!("Failed to set remote with exit code: {}", status));
     }
@@ -121,8 +137,8 @@ pub fn check_out(local_path: &str) -> Result<()> {
 
 /// Create a new repository
 /// Returns true if this was a virgin (newly initialized) repository that needs a checkout after the remote is added
-pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<bool> {
-    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_path, repo.remote_path);
+pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<bool> {
+    println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_path, repo.remote_url);
     let local_path = repo.local_path;
     let remote_rel_path = repo.remote_path;
     
@@ -144,7 +160,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<bool> {
     } else {
         &config.rpath_base
     };
-    
+
     // Parse SSH host
     let ssh_host = if rlogin.is_empty() {
         "localhost"
@@ -153,51 +169,48 @@ pub fn create_new(repo: &RepoTriple, config: &Config) -> Result<bool> {
     } else {
         return Err(anyhow!("RLOGIN must be in format 'ssh://[user@]host' for SSH remote creation"));
     };
-    
-    // Check if current directory is already a git repo
-    let is_virgin_repo = !Path::new(local_path).join(".git").exists();
-    
+
     // Construct remote path with .git extension
     let mut grm_rpath = format!("{}/{}", rpath_base, remote_rel_path);
     if !grm_rpath.ends_with(".git") {
         grm_rpath.push_str(".git");
     }
-    
+
     // Prompt for confirmation
     print!("About to create remote repo '{}'; are you sure? (y/n) ", grm_rpath);
     std::io::stdout().flush()?;
     let mut input = String::new();
     std::io::stdin().read_line(&mut input)?;
-    
+
     if !input.trim().eq_ignore_ascii_case("y") {
         println!("(aborted)");
         return Ok(false);
     }
-    
+
     // Create remote repo based on template
     let ssh_cmd = format!("xargs -0 -n 1 -- cp -na --reflink=auto '{}/{}'", rpath_base, rpath_template);
-    
+
     let mut child = Command::new("ssh")
         .args([ssh_host, &ssh_cmd])
         .stdin(std::process::Stdio::piped())
         .spawn()
         .with_context(|| "Failed to spawn SSH command for repository creation")?;
-    
+
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
         stdin.write_all(format!("{}\0", grm_rpath).as_bytes())?;
     }
-    
+
     let status = child.wait()?;
     if !status.success() {
         return Err(anyhow!("Remote repository creation failed with status: {:?}", status));
     }
-    
+
     // Initialize git repository
     init_git_repository(local_path)?;
-    
+
     println!("Repository created successfully");
-    Ok(is_virgin_repo)
+    Ok(!is_repo)
 }
 
 /// Run a git command in the repository (public function called from main.rs)

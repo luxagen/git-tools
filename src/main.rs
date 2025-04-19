@@ -55,13 +55,33 @@ fn find_conf_file(config: &Config) -> Result<PathBuf> {
     Err(anyhow!("Configuration file not found"))
 }
 
+enum RepoState {
+    Missing,
+    File,
+    Directory,
+    Repo,
+}
+
+fn determine_repo_state(path: &Path) -> Result<RepoState> {
+    if !path.exists() {
+        return Ok(RepoState::Missing);
+    }
+
+    if !path.is_dir() {
+        return Ok(RepoState::File);
+    }
+
+    match repository::is_dir_repo_root(path.to_str().unwrap()) {
+        Ok(result) => Ok(if result { RepoState::Repo } else { RepoState::Directory }),
+        Err(err) => Err(err)
+    }
+}    
+
 /// Process a single repository
 fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get operations
     let operations = get_operations();
 
-    let remote_url = get_remote_url(config, repo.remote_path);
-    
     if operations.list_rrel {
         println!("{}", repo.remote_path); // NEEDS RREL
         return Ok(());
@@ -74,153 +94,63 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
 
     let path = Path::new(repo.local_path);
 
-    let is_repo = match repository::is_dir_repo_root(repo.local_path) {
-        Ok(result) => result,
-        Err(err) => {
-            eprintln!("Error checking if {} is a Git repository: {}", repo.local_path, err);
-            return Ok(());
-        }
-    };
+    let mut state = determine_repo_state(path)?;
 
     let mut needs_checkout = false;
 
-    if path.exists() {
-        if path.is_dir() {
-            if is_repo {
-                if operations.git {
-                    repository::run_git_command(repo.local_path, &config.git_args)?; // NEEDS NOTHING
-                }
-
-                // continue: is a repo
+    loop {
+        state = match state {
+            RepoState::File => {
+                return Ok(()); // Terminal
             }
-            else {
-                if operations.new {
-                    needs_checkout = repository::create_new(repo, config)?;  // NEEDS RREL
-                    // continue: is a repo
+            RepoState::Missing => {
+                if !operations.clone {
+                    return Ok(()); // Terminal
                 }
-                else {
-                    // stop! not a repo
-                }
+
+                repository::clone_repo_no_checkout(&repo)?; // NEEDS RURL
+                needs_checkout = true;
+                RepoState::Repo // New state
             }
+            RepoState::Directory => {
+                if !operations.new {
+                    return Ok(()); // Terminal
+                }
+
+                needs_checkout = repository::create_new(&repo, config, false)?;  // NEEDS RREL
+                RepoState::Repo // New state
+            }
+            RepoState::Repo => {
+                // NOTE: WE MUST SUPPORT NEW MODE HERE!!!
+                RepoState::Repo // Unchanged
+            }
+        };
+
+        if operations.list_rurl {
+            println!("{}", repo.remote_path);  // NEEDS RURL
+            return Ok(());
         }
-        else {
-            // complain: not a dir
-            // stop! not a dir
+
+        if operations.git {
+            repository::run_git_command(repo.local_path, &config.git_args)?;
         }
-    }
-    else {
-        if operations.clone {
-            repository::clone_repo_no_checkout(&repo)?; // NEEDS RURL
-            needs_checkout = true;
-            // now exists and is a dir, so continue
+
+        if operations.configure {
+            repository::configure_repo(&repo, config)?; // NEEDS NOTHING
         }
-        else {
-            // stop! doesn't exist
-        }
-    }
-
-    // WE SOMEHOW NEED TO RUN THIS IN LISTING MODE REGARDLESS
-
-    if operations.list_rurl {
-        println!("{}", repo.remote_path);  // NEEDS RURL
-        return Ok(());
-    }
-
-    if operations.configure {
-        repository::configure_repo(&repo, config)?; // NEEDS NOTHING
-    }
-
-    if operations.set_remote {
-        // fetch?
-        repository::set_remote(&repo)?; // NEEDS RURL
-    }
-
-    // Checkout master if needed (for new repositories)
-    if needs_checkout {
-        repository::check_out(repo.local_path)?; // NEEDS NOTHING
-    }
-
-
-//    if operations.new {
-//        if !path.exists() {
-//            eprintln!("ERROR: {} does not exist", repo.local);
-//            return Ok(());
-//        }
-//        
-//        if !path.is_dir() {
-//            eprintln!("ERROR: {} is not a directory", repo.local);
-//            return Ok(());
-//        }
-//
-//        let is_repo = match repository::is_dir_repo_root(repo.local) {
-//            Ok(result) => result,
-//            Err(err) => {
-//                eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
-//                return Ok(());
-//            }
-//        };
-//        
-//        if is_repo {
-//            eprintln!("{} already exists (skipping)", repo.local);
-//            return Ok(());
-//        }
-//        
-//        // Create new repo
-//        eprintln!("Creating new Git repository in {}", repo.local);
-//        needs_checkout = repository::create_new(repo, config)?;
-//        
-//        eprintln!("{} created", repo.local);
-//    }
-
-    // For all other operations, use the remote URL instead of the relative path
-    // Redefine repo to use the URL version for other operations
-    let repo = RepoTriple {
-        remote_path: &get_remote_url(config, repo.remote_path),
-        local_path: repo.local_path,
-        media_path: repo.media_path,
-    };
-
-//    // Process based on path state
-//    if !path.exists() {
-//        // Only clone if clone operation is enabled
-//        if !operations.clone {
-//            eprintln!("ERROR: {} does not exist", repo.local);
-//            return Ok(());
-//        }
-//
-//        // Clone, configure, and checkout
-//        repository::clone_repo_no_checkout(&repo)?;
-//        needs_configure = true;
-//        needs_checkout = true;
-//    }
-
-//    // Check if path is a directory
-//    if !path.is_dir() {
-//        eprintln!("ERROR: {} is not a directory", repo.local);
-//        return Ok(());
-//    }
     
-    // Check if directory is a git repository
-//    let is_repo = match repository::is_dir_repo_root(repo.local) {
-//        Ok(result) => result,
-//        Err(err) => {
-//            eprintln!("Error checking if {} is a Git repository: {}", repo.local, err);
-//            return Ok(());
-//        }
-//    };
+        if operations.set_remote {
+            // fetch?
+            repository::set_remote(&repo)?; // NEEDS RURL
+        }
+    
+        // Checkout master if needed (for new repositories)
+        if needs_checkout {
+            repository::check_out(repo.local_path)?; // NEEDS NOTHING
+        }
 
-//    if !is_repo {
-//        // If we get here, the directory exists but isn't a git repository
-//        eprintln!("ERROR: {} is not a Git repository", repo.local);
-//        return Ok(());
-//    }
-
-    // Get remote URL
-//    if !operations.new { // Don't print this for new repos (already did)
-//        eprintln!("{} exists", repo.local);
-//    }
-
-    return Ok(());
+        return Ok(()); // Job done
+    }
 }
 
 /// Process a repository listfile
@@ -290,51 +220,34 @@ fn process_repo_line(config: &mut Config, cells: Vec<String>) -> Result<()> {
         }
         return Ok(());
     }
-    
+
     // Extract raw path components from cells
-    let (raw_remote, raw_local, raw_media) = extract_repo_components(&cells);
-    
-    // Create raw repo specification with extracted components
-    let raw_spec = OwnedRepoSpec {
-        remote: raw_remote,
-        local: raw_local,
-        media: raw_media,
-    };
-    
-    // Resolve paths by applying prefixes based on config settings
-    let resolved_spec = resolve_repo_paths(config, &raw_spec);
-    
-    // Create a repo triple that borrows from our resolved spec
-    // This is safe because resolved_spec lives for the rest of this function
-    let repo_spec = RepoTriple {
-        remote_path: &resolved_spec.remote,
-        local_path: &resolved_spec.local,
-        media_path: &resolved_spec.media,
-    };
+    let (remote, local, media) = extract_repo_paths(&cells);
+    let (remote, local, media) = qualify_repo_paths(&config, &remote, &local, &media);
+    let remote_url = get_remote_url(&config, &remote);
+
+    let rt = RepoTriple::new(
+        &remote,
+        &local,
+        &media,
+        &remote_url,
+    );
     
     // Filter out repositories that are not in or below the current directory
-    if !passes_tree_filter(&config.tree_filter, repo_spec.local_path) {
+    if !passes_tree_filter(&config.tree_filter, &rt.local_path) {
         return Ok(());
     }
     
     if get_operations().debug {
-        eprintln!("Potential target: {}", repo_spec.local_path);
+        eprintln!("Potential target: {}", &rt.local_path);
     }
     
     // Process the repository
-    if let Err(err) = process_repo(config, &repo_spec) {
-        eprintln!("Error processing {}: {}", repo_spec.local_path, err);
+    if let Err(err) = process_repo(config, &rt) {
+        eprintln!("Error processing {}: {}", &rt.local_path, err);
     }
     
     Ok(())
-}
-
-// Create a struct to represent repository specifications with owned strings
-#[derive(Debug, Clone)]
-struct OwnedRepoSpec {
-    remote: String,
-    local: String,
-    media: String,
 }
 
 // Use the shared RepoTriple from repository.rs
@@ -364,9 +277,23 @@ fn passes_tree_filter(tree_filter: &str, local_path: &str) -> bool {
     passes
 }
 
+/// Concatenate paths
+pub fn cat_paths(base: &str, rel: &str) -> String {
+    // Absolute paths remain unchanged
+    if rel.starts_with('/') || base.is_empty() {
+        return rel.to_string();
+    }
+
+    // Relative paths get base prefix if applicable
+    if !rel.is_empty() {
+        format!("{}/{}", base, rel)
+    } else {
+        base.to_string()
+    }
+}
 
 /// Extract raw repository path components from config file cells
-fn extract_repo_components(cells: &Vec<String>) -> (String, String, String) {
+fn extract_repo_paths(cells: &Vec<String>) -> (String, String, String) {
     // First cell is always the remote relative path
     let remote_rel = cells[0].clone();
     
@@ -392,33 +319,15 @@ fn extract_repo_components(cells: &Vec<String>) -> (String, String, String) {
     (remote_rel, local_rel, media_rel)
 }
 
-/// Apply path transformations to raw repository paths based on configuration settings
-fn resolve_repo_paths(config: &Config, raw_spec: &OwnedRepoSpec) -> OwnedRepoSpec {
-    // Apply appropriate prefixes to each path based on config settings
-    let remote_path = cat_paths(&config.remote_dir, &raw_spec.remote);
-    let local_path = cat_paths(&config.local_dir, &raw_spec.local);
-    let media_path = cat_paths(&config.gm_dir, &raw_spec.media);
-    
-    // Return new spec with fully resolved paths
-    OwnedRepoSpec {
-        remote: remote_path,
-        local: local_path,
-        media: media_path,
-    }
-}
-
-pub fn cat_paths(base: &str, rel: &str) -> String {
-    // Absolute paths remain unchanged
-    if rel.starts_with('/') || base.is_empty() {
-        return rel.to_string();
-    }
-
-    // Relative paths get base prefix if applicable
-    if !rel.is_empty() {
-        format!("{}/{}", base, rel)
-    } else {
-        base.to_string()
-    }
+/// Qualify repository paths based on configuration
+fn qualify_repo_paths(config: &Config, remote: &str, local: &str, media: &str) -> (String, String, String) {
+    (
+        cat_paths( // TODO do this in one go?
+            &config.rpath_base,
+            &cat_paths(&config.remote_dir, remote)),
+        cat_paths(&config.local_dir, &local),
+        cat_paths(&config.gm_dir, &media),
+    )
 }
 
 /// Get formatted remote URL based on configuration and remote relative path
