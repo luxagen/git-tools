@@ -80,6 +80,7 @@ fn determine_repo_state(path: &str) -> Result<RepoState> {
 }    
 
 /// Process a single repository
+#[allow(unused_assignments)] // Stupid compiler
 fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     // Get operations
     let operations = get_operations();
@@ -103,7 +104,9 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
 
     let mut needs_checkout = false;
 
+    // State machine for the repository
     loop {
+        let _ = state;
         state = match state {
             RepoState::File => {
                 return Ok(()); // Terminal

@@ -152,10 +152,3 @@ pub fn get_operations() -> &'static Operations {
 pub fn get_mode_string() -> &'static str {
     MODE_STRING.get().expect("MODE_STRING not initialized")
 }
-
-impl Operations {
-    /// Check if this is a listing mode
-    pub fn is_listing_mode(&self) -> bool {
-        self.list_rrel || self.list_rurl || self.list_lrel
-    }
-}
