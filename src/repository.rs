@@ -196,10 +196,46 @@ pub fn create_remote(repo: &RepoTriple, config: &Config, is_repo: bool) -> Resul
     }
 
     // Create remote repo based on template
-    let ssh_cmd = format!("xargs -0 -n 2 -- cp -na --reflink=auto");
+    // Define unique exit codes
+    const EXIT_NOT_REPO: i32 = 90;
+    const EXIT_IS_FILE: i32 = 91;
+    
+    // Script to check and create remote repository
+    let script = format!(r##"#!/bin/bash
+set -e
+TARGET="{}"
+TEMPLATE="{}"
+
+if [ -d "$TARGET" ]; then
+    # Check if it's a repo
+    if [ -d "$TARGET/objects" ] && [ -d "$TARGET/refs" ]; then
+        # It's a git repo, success
+        exit 0
+    else
+        # Directory exists but isn't a repo
+        exit {}
+    fi
+elif [ -f "$TARGET" ]; then
+    # It's a file, can't proceed
+    exit {}
+else
+    # Doesn't exist, create it
+    if [ -z "$TEMPLATE" ] || [ ! -d "$TEMPLATE" ]; then
+        # No template, create bare repo
+        mkdir -p "$TARGET"
+        cd "$TARGET"
+        git init --bare -q
+    else
+        # Use template
+        mkdir -p "$(dirname "$TARGET")"
+        cp -na --reflink=auto "$TEMPLATE" "$TARGET"
+    fi
+    exit 0
+fi
+"##, target_path, rpath_template, EXIT_NOT_REPO, EXIT_IS_FILE);
 
     let mut child = Command::new("ssh")
-        .args([ssh_host, &ssh_cmd])
+        .args([ssh_host, "bash -s"])
         .stdin(std::process::Stdio::piped())
         .spawn()
         .with_context(|| "Failed to spawn SSH command for repository creation")?;
