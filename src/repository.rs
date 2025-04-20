@@ -199,6 +199,7 @@ pub fn create_remote(repo: &RepoTriple, config: &Config, is_repo: bool) -> Resul
     // Define unique exit codes
     const EXIT_NOT_REPO: i32 = 90;
     const EXIT_IS_FILE: i32 = 91;
+    const EXIT_OTHER_FILETYPE: i32 = 92;
     
     // Script to check and create remote repository
     let script = format!(r##"#!/bin/bash
@@ -215,9 +216,15 @@ if [ -d "$TARGET" ]; then
         # Directory exists but isn't a repo
         exit {}
     fi
-elif [ -f "$TARGET" ]; then
-    # It's a file, can't proceed
-    exit {}
+elif [ -e "$TARGET" ]; then
+    # Path exists but isn't a directory
+    if [ -f "$TARGET" ]; then
+        # Regular file
+        exit {}
+    else
+        # Other file type (symlink, device, socket, fifo, etc.)
+        exit {}
+    fi
 else
     # Doesn't exist, create it
     if [ -z "$TEMPLATE" ] || [ ! -d "$TEMPLATE" ]; then
@@ -232,7 +239,7 @@ else
     fi
     exit 0
 fi
-"##, target_path, rpath_template, EXIT_NOT_REPO, EXIT_IS_FILE);
+"##, target_path, rpath_template, EXIT_NOT_REPO, EXIT_IS_FILE, EXIT_OTHER_FILETYPE);
 
     let mut child = Command::new("ssh")
         .args([ssh_host, "bash -s"])
@@ -257,7 +264,10 @@ fi
             return Err(anyhow!("Target directory exists but is not a git repository: {}", target_path));
         },
         Some(EXIT_IS_FILE) => {
-            return Err(anyhow!("Target path exists as a file: {}", target_path));
+            return Err(anyhow!("Target path exists as a regular file: {}", target_path));
+        },
+        Some(EXIT_OTHER_FILETYPE) => {
+            return Err(anyhow!("Target path exists as a special file (device, pipe, socket, or symlink): {}", target_path));
         },
         _ => {
             return Err(anyhow!("Remote repository creation failed with status: {:?}", status));
