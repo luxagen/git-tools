@@ -242,15 +242,28 @@ fi
 
     if let Some(mut stdin) = child.stdin.take() {
         use std::io::Write;
-        stdin.write_all(format!("{}\0{}\0", rpath_template, target_path).as_bytes())?;
+        stdin.write_all(script.as_bytes())?;
     }
 
     let status = child.wait()?;
-    if !status.success() {
-        return Err(anyhow!("Remote repository creation failed with status: {:?}", status));
+    
+    // Handle exit codes
+    match status.code() {
+        Some(0) => {
+            // Success
+            println!("Repository created successfully");
+        },
+        Some(EXIT_NOT_REPO) => {
+            return Err(anyhow!("Target directory exists but is not a git repository: {}", target_path));
+        },
+        Some(EXIT_IS_FILE) => {
+            return Err(anyhow!("Target path exists as a file: {}", target_path));
+        },
+        _ => {
+            return Err(anyhow!("Remote repository creation failed with status: {:?}", status));
+        }
     }
 
-    println!("Repository created successfully");
     Ok(!is_repo)
 }
 
