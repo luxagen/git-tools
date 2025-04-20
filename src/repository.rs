@@ -227,8 +227,8 @@ elif [ -e "$TARGET" ]; then
     fi
 else
     # Doesn't exist, create it
-    if [ -z "$TEMPLATE" ] || [ ! -d "$TEMPLATE" ]; then
-        # No template, create bare repo
+    if [ -z "$TEMPLATE" ]; then
+        # No template config, create bare repo
         mkdir -p "$TARGET"
         cd "$TARGET"
         git init --bare -q
