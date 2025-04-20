@@ -125,12 +125,16 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
                     return Ok(()); // Terminal
                 }
 
-                needs_checkout = repository::create_new(&repo, config, false)?;
+                // Initialize git repository
+                repository::init_new(&repo.local_path)?;
+
+                // dir: create_remote (is not repo)
+                needs_checkout = repository::create_remote(&repo, config, false)?;
                 RepoState::Repo // New state
             }
             RepoState::Repo => {
-                if !operations.new {
-                    needs_checkout = repository::create_new(&repo, config, false)?;
+                if operations.new {
+                    needs_checkout = repository::create_remote(&repo, config, true)?;
                 }
 
                 RepoState::Repo // Unchanged

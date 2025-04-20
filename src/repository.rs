@@ -51,7 +51,7 @@ pub fn is_dir_repo_root(local_path: &str) -> Result<bool> {
 }
 
 /// Initialize a git repository
-fn init_git_repository(local_path: &str) -> Result<()> {
+pub fn init_new(local_path: &str) -> Result<()> {
     // Initialize git repository
     let status = process::run_in_dir(local_path, &["git", "init", "-q"])?;
     if status != 0 {
@@ -141,7 +141,7 @@ pub fn check_out(local_path: &str) -> Result<()> {
 
 /// Create a new repository
 /// Returns true if this was a virgin (newly initialized) repository that needs a checkout after the remote is added
-pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<bool> {
+pub fn create_remote(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<bool> {
     println!("Creating new repository at \"{}\" with remote \"{}\"", repo.local_path, repo.remote_url);
     
     // Check required configuration
@@ -181,7 +181,7 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
     }
 
     // Create remote repo based on template
-    let ssh_cmd = format!("xargs -0 -n 1 -- cp -na --reflink=auto");
+    let ssh_cmd = format!("xargs -0 -n 2 -- cp -na --reflink=auto");
 
     let mut child = Command::new("ssh")
         .args([ssh_host, &ssh_cmd])
@@ -198,9 +198,6 @@ pub fn create_new(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<b
     if !status.success() {
         return Err(anyhow!("Remote repository creation failed with status: {:?}", status));
     }
-
-    // Initialize git repository
-    init_git_repository(repo.local_path)?;
 
     println!("Repository created successfully");
     Ok(!is_repo)
