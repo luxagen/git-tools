@@ -204,26 +204,26 @@ pub fn create_remote(repo: &RepoTriple, config: &Config, is_repo: bool) -> Resul
     // Script to check and create remote repository
     let script = format!(r##"#!/bin/bash
 set -e
-TARGET="{}"
-TEMPLATE="{}"
+TARGET="{target_path}"
+TEMPLATE="{rpath_template}"
 
 if [ -d "$TARGET" ]; then
-    # Check if it's a repo
-    if [ -d "$TARGET/objects" ] && [ -d "$TARGET/refs" ]; then
+    # Check if it's a repo using proper git plumbing command
+    if git -C "$TARGET" rev-parse --git-dir >/dev/null 2>&1; then
         # It's a git repo, success
         exit 0
     else
         # Directory exists but isn't a repo
-        exit {}
+        exit {EXIT_NOT_REPO}
     fi
 elif [ -e "$TARGET" ]; then
     # Path exists but isn't a directory
     if [ -f "$TARGET" ]; then
         # Regular file
-        exit {}
+        exit {EXIT_IS_FILE}
     else
         # Other file type (symlink, device, socket, fifo, etc.)
-        exit {}
+        exit {EXIT_OTHER_FILETYPE}
     fi
 else
     # Doesn't exist, create it
@@ -239,7 +239,7 @@ else
     fi
     exit 0
 fi
-"##, target_path, rpath_template, EXIT_NOT_REPO, EXIT_IS_FILE, EXIT_OTHER_FILETYPE);
+"##);
 
     let mut child = Command::new("ssh")
         .args([ssh_host, "bash -s"])
