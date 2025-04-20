@@ -139,6 +139,21 @@ pub fn check_out(local_path: &str) -> Result<()> {
     Ok(())
 }
 
+// create_remote:
+// 0. if RLOGIN protocol is not SSH or local, abort with "cannot auto-create non-SSH remotes" complaint
+// 1. else is protocol is SSH, connect and pipe in the shell script below
+// 2. else if RLOGIN protocol is local, run the following shell script using the local shell as in execute_config_cmd
+
+// Shell script (note: use return codes to clearly signal termination conditions):
+// 1. if remote exists as dir:
+//   a. if is a repo, finish (success)
+//   b. else abort with "existing dir" complaint
+// 2. else if remote exists as file, abort with "existing file" complaint
+// 3. else:
+//   a. if no template config, mkdir && cd && git init --bare
+//   b. else cp -na --reflink=always to create
+//   c. finish (success)
+
 /// Create a new repository
 /// Returns true if this was a virgin (newly initialized) repository that needs a checkout after the remote is added
 pub fn create_remote(repo: &RepoTriple, config: &Config, is_repo: bool) -> Result<bool> {

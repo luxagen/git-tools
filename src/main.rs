@@ -10,6 +10,7 @@ use clap::Parser;
 use std::collections::HashMap;
 use regex::Regex;
 use url::Url;
+use colored::Colorize;
 
 mod process;
 mod recursive;
@@ -103,6 +104,8 @@ fn process_repo(config: &Config, repo: &RepoTriple) -> Result<()> {
     let mut state = determine_repo_state(&repo.local_path)?;
 
     let mut needs_checkout = false;
+
+    print!("{}: ", &repo.local_path.bright_white());
 
     // State machine for the repository
     loop {
